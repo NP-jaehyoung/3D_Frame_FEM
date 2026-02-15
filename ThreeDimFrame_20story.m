@@ -61,26 +61,37 @@ GDof = 6*numberNodes;
 
 %% assemble K, M
 force = zeros(GDof,1);
-stiffness = formStiffness3Dframe(GDof, numberElements, elementNodes,...
-    numberNodes, nodeCoordinates, E, A, Iz, Iy, G, J);
-mass = formMass3Dframe(GDof, numberElements, elementNodes,...
-    numberNodes, nodeCoordinates, rho, A, Iz, Iy);
-
-%% boundary conditions: fix 1st floor nodes (nodes 1~4)
-prescribedDof = 1:24;
-
-%% top story one-point load at DOF UX of node 3 of top floor
+% top story one-point load at UX of node 3 of top floor
 topNode = 4*(numFloors-1) + 3;   % 1st corner node on top floor
 topLoadDof = 6*topNode - 5;      % UX at that node
 force(topLoadDof) = Ptop;
 
+stiffness = formStiffness3Dframe(GDof, numberElements, elementNodes,...
+    numberNodes, nodeCoordinates, E, A, Iz, Iy, G, J);
+mass = formMass3Dframe(GDof, numberElements, elementNodes,...
+    numberNodes, nodeCoordinates, rho, A, Iz, Iy);
+stiffnessAll = stiffness;
+massAll = mass;
+forceAll = force;
+
+%% rigid diaphragm constraints: tie all nodes by floor in UX, UZ, RY (dx, dz, ry)
+[stiffness, mass, force, T, dofToReduced] = ...
+    applyRigidDiaphragmConstraints(stiffnessAll, massAll, forceAll, ...
+    nodeCoordinates, 2, numFloors);
+
+%% boundary conditions: fix 1st floor nodes (nodes 1~4)
+prescribedDof = 1:24;
+prescribedDofReduced = unique(dofToReduced(prescribedDof));
+
 %% static solution and output
-displacements = solution(GDof,prescribedDof,stiffness,force);
-reactions = stiffness*displacements - force;
+displacementsReduced = solution(size(stiffness,1), prescribedDofReduced, ...
+    stiffness, force);
+displacements = T * displacementsReduced;
+reactions = stiffnessAll * displacements - forceAll;
 reactionSupport = reactions(prescribedDof);
 
 fprintf("20-floor 3D frame example\n");
-fprintf("Top node: %d, top load DOF: %d, load: %.4g\n", topNode, topLoadDof, force(topLoadDof));
+fprintf("Top node: %d, top load DOF: %d, load: %.4g\n", topNode, topLoadDof, Ptop);
 fprintf("Top node displacement (UX,UY,UZ) [m]\n");
 fprintf("UX = %.6e\n", displacements(topLoadDof));
 fprintf("UY = %.6e\n", displacements(topLoadDof+1));
@@ -93,7 +104,9 @@ end
 
 %% modal analysis
 maxModesToShow = 10;
-[modes,eigenvalues] = eigenvalue(GDof,prescribedDof,stiffness,mass,maxModesToShow);
+[modesReduced,eigenvalues] = eigenvalue(size(stiffness,1), ...
+    prescribedDofReduced, stiffness, mass, maxModesToShow);
+modes = T * modesReduced;
 omega = sqrt(abs(eigenvalues));           % rad/s
 freqHz = omega/(2*pi);                   % Hz
 [freqHzSorted, sortIdx] = sort(freqHz,"ascend");
@@ -123,6 +136,7 @@ dispTable = table(dofIndex,nodeIndex,dofComp,displacements, ...
 writetable(dispTable, fullfile(outputDir,'ThreeDimFrame_20story_displacements.csv'));
 
 % reactions table
+supportDof = prescribedDof;
 reactionNode = ceil(supportDof/6);
 reactionComp = compNames(mod(supportDof-1,6)+1)';
 reactionTable = table(supportDof,reactionNode,reactionComp,reactionSupport, ...
@@ -253,6 +267,49 @@ for e = 1:numberElements
     mass(elementDof,elementDof)=...
         mass(elementDof,elementDof)+R'*m*R;
 end
+end
+
+function [Kc,Mc,Fc,T,dofToReduced] = applyRigidDiaphragmConstraints(K, M, F, ...
+    nodeCoordinates, startFloor, numFloors)
+GDof = size(K,1);
+dofToRep = (1:GDof)';
+dofTie = [1 3 5]; % UX, UZ, RY (dx, dz, ry)
+
+levels = unique(nodeCoordinates(:,2),'stable');
+if numel(levels) < numFloors
+    numFloors = numel(levels);
+end
+if startFloor < 1
+    startFloor = 1;
+end
+
+for iFloor = startFloor:numFloors
+    floorNodes = find(abs(nodeCoordinates(:,2)-levels(iFloor)) < 1e-9);
+    if isempty(floorNodes)
+        continue;
+    end
+    repNode = floorNodes(1);
+    for dof = dofTie
+        repDof = 6*(repNode-1)+dof;
+        for j = 1:numel(floorNodes)
+            nodeId = floorNodes(j);
+            fullDof = 6*(nodeId-1)+dof;
+            dofToRep(fullDof) = repDof;
+        end
+    end
+end
+
+uniqueRep = unique(dofToRep,'stable');
+dofToReduced = zeros(GDof,1);
+for i = 1:numel(uniqueRep)
+    dofToReduced(uniqueRep(i)) = i;
+end
+dofToReduced = dofToReduced(dofToRep);
+
+T = sparse((1:GDof)', dofToReduced, ones(GDof,1), GDof, numel(uniqueRep));
+Kc = T' * K * T;
+Mc = T' * M * T;
+Fc = T' * F;
 end
 
 function displacements=solution(GDof,prescribedDof,stiffness,force)
