@@ -102,9 +102,6 @@ for iMode = 1:min(maxModesToShow,length(freqHzSorted))
     fprintf("Mode %2d : %12.8e\n", iMode, freqHzSorted(iMode));
 end
 
-% optional access to mode shapes:
-_ = modes;
-
 %% local functions
 function  [stiffness]=formStiffness3Dframe(GDof,numberElements,elementNodes,numberNodes,nodeCoordinates,E,A,Iz,Iy,G,J);
 stiffness = zeros(GDof);
