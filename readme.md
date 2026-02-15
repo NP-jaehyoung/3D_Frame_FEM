@@ -45,6 +45,10 @@
 - 강체 바닥(디아프램) 제약 적용
   - 각 층(2층~20층)에서 `UX`, `UZ`, `RY`를 동일화
   - 축소 좌표계 해석 후 전체 좌표계로 복원해 반력까지 계산
+- 공통 모듈화 시작
+  - `build3DFrameGeometry.m`, `assemble3DFrameMatrices.m`, `applyRigidDiaphragmConstraints.m`
+  - `solveConstrainedStatic.m`, `solveEigenModes.m`, `ode45StateRhs3DFrame.m`
+  - 두 메인 스크립트(`ThreeDimFrame_20story.m`, `ThreeDimFrame_20story_ode45.m`)가 동일한 함수를 공유
 
 ## 실행 가이드 (MATLAB)
 1. MATLAB 작업 폴더를 저장소 루트로 이동
