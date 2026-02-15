@@ -31,8 +31,8 @@ switch typeBC
             yy==min(nodeCoordinates(:,2))|...
             yy==max(nodeCoordinates(:,2)));
         
-        fixedNodeTX =find(xx==max(nodeCoordinates(:,2))|...
-            xx==min(nodeCoordinates(:,2)));
+        fixedNodeTX =find(yy==max(nodeCoordinates(:,2))|...
+            yy==min(nodeCoordinates(:,2)));
         fixedNodeTY=[];
         
     case 'cccf'

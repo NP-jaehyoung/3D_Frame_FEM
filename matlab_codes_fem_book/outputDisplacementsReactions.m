@@ -1,7 +1,10 @@
 % ................................................................
 function outputDisplacementsReactions...
-    (displacements,stiffness,GDof,prescribedDof)
+    (displacements,stiffness,GDof,prescribedDof,force)
 % output of displacements and reactions in tabular form
+if nargin < 5 || isempty(force)
+    force = zeros(GDof,1);
+end
 
 % GDof: total number of degrees of freedom of the problem
 
@@ -12,7 +15,7 @@ jj = 1:GDof; format
 
 % reactions
 F = stiffness*displacements;
-reactions = F(prescribedDof);
+reactions = F(prescribedDof) - force(prescribedDof);
 disp('reactions')
 [prescribedDof reactions]
 
