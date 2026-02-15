@@ -102,6 +102,45 @@ for iMode = 1:min(maxModesToShow,length(freqHzSorted))
     fprintf("Mode %2d : %12.8e\n", iMode, freqHzSorted(iMode));
 end
 
+%% export results to table
+outputDir = fileparts(mfilename('fullpath'));
+if isempty(outputDir)
+    outputDir = pwd;
+end
+outputDir = fullfile(outputDir,'results');
+if ~exist(outputDir, 'dir')
+    mkdir(outputDir);
+end
+
+% displacement table
+dofIndex = (1:GDof)';
+nodeIndex = ceil(dofIndex/6);
+compIndex = mod(dofIndex-1,6)+1;
+compNames = {'UX','UY','UZ','RX','RY','RZ'};
+dofComp = compNames(compIndex)';
+dispTable = table(dofIndex,nodeIndex,dofComp,displacements, ...
+    'VariableNames', {'DOF','Node','Component','Displacement'});
+writetable(dispTable, fullfile(outputDir,'ThreeDimFrame_20story_displacements.csv'));
+
+% reactions table
+reactionNode = ceil(supportDof/6);
+reactionComp = compNames(mod(supportDof-1,6)+1)';
+reactionTable = table(supportDof,reactionNode,reactionComp,reactionSupport, ...
+    'VariableNames', {'DOF','Node','Component','Reaction'});
+writetable(reactionTable, fullfile(outputDir,'ThreeDimFrame_20story_reactions.csv'));
+
+% modal table
+omegaSorted = 2*pi*freqHzSorted;
+modeId = (1:numel(freqHzSorted))';
+modalTable = table(modeId,freqHzSorted,omegaSorted,sortIdx, ...
+    'VariableNames', {'Mode','Frequency_Hz','Omega_rad_s','OriginalIndex'});
+writetable(modalTable, fullfile(outputDir,'ThreeDimFrame_20story_modes.csv'));
+
+fprintf('\nResult tables saved to: %s\n', outputDir);
+fprintf('- ThreeDimFrame_20story_displacements.csv\n');
+fprintf('- ThreeDimFrame_20story_reactions.csv\n');
+fprintf('- ThreeDimFrame_20story_modes.csv\n');
+
 %% local functions
 function  [stiffness]=formStiffness3Dframe(GDof,numberElements,elementNodes,numberNodes,nodeCoordinates,E,A,Iz,Iy,G,J);
 stiffness = zeros(GDof);
