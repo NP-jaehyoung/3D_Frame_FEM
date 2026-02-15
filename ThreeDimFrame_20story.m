@@ -137,8 +137,12 @@ writetable(dispTable, fullfile(outputDir,'ThreeDimFrame_20story_displacements.cs
 
 % reactions table
 supportDof = prescribedDof;
+supportDof = supportDof(:);
 reactionNode = ceil(supportDof/6);
 reactionComp = compNames(mod(supportDof-1,6)+1)';
+reactionSupport = reactionSupport(:);
+reactionNode = reactionNode(:);
+reactionComp = reactionComp(:);
 reactionTable = table(supportDof,reactionNode,reactionComp,reactionSupport, ...
     'VariableNames', {'DOF','Node','Component','Reaction'});
 writetable(reactionTable, fullfile(outputDir,'ThreeDimFrame_20story_reactions.csv'));
