@@ -25,6 +25,8 @@ Iz = 1/12;
 nu = 0.167;
 J = 2.25*1^4;             
 G = E/(2*(1+nu));
+floorLoads = zeros(numFloors,1);            % per-floor lateral loads [kN] for static preload
+% floorLoads = -3000 * ones(numFloors,1);   % (uncomment for distributed static lateral loads)
 
 %% time history settings
 timeEnd = 20;               % sec
@@ -47,7 +49,7 @@ zeta1 = dampingRatio;
 
 [stiffness, mass, force, GDof] = ...
     assemble3DFrameMatrices(numFloors, nodeCoordinates, elementNodes, ...
-    E, A, Iz, Iy, G, J, rho, 0);
+    E, A, Iz, Iy, G, J, rho, 0, floorLoads, "UX");
 stiffnessAll = stiffness;
 massAll = mass;
 forceAll = force;

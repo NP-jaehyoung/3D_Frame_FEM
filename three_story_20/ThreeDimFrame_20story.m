@@ -26,7 +26,8 @@ Iz = 1/12;
 nu = 0.167;
 J = 2.25*1^4;             
 G = E/(2*(1+nu));
-Ptop = -3000;              % single lateral load at top story [kN]
+floorLoads = -3000 * ones(numFloors,1);   % floor lateral load per level [kN]
+topLoad = floorLoads(end);               % for log only: top-floor equivalent point load
 
 %% mesh and loads
 [nodeCoordinates, elementNodes] = build3DFrameGeometry(numFloors, floorHeight, spanX, spanZ);
@@ -37,7 +38,7 @@ topLoadDof = 6*topNode - 5;
 %% assemble K, M
 [stiffness, mass, force, GDof] = ...
     assemble3DFrameMatrices(numFloors, nodeCoordinates, elementNodes, ...
-    E, A, Iz, Iy, G, J, rho, Ptop);
+    E, A, Iz, Iy, G, J, rho, 0, floorLoads, "UX");
 stiffnessAll = stiffness;
 massAll = mass;
 forceAll = force;
@@ -60,7 +61,8 @@ reactions = stiffnessAll * displacements - forceAll;
 reactionSupport = reactions(prescribedDof);
 
 fprintf("20-floor 3D frame example\n");
-fprintf("Top node: %d, top load DOF: %d, load: %.4g\n", topNode, topLoadDof, Ptop);
+fprintf("Top node: %d, top load DOF: %d, load: %.4g\n", topNode, topLoadDof, topLoad);
+fprintf("Floor loads: applied per floor (each floor equally distributed to 4 nodes)\n");
 fprintf("Top node displacement (UX,UY,UZ) [m]\n");
 fprintf("UX = %.6e\n", displacements(topLoadDof));
 fprintf("UY = %.6e\n", displacements(topLoadDof+1));
@@ -126,6 +128,11 @@ modalTable = table(modeId,freqHzSorted,omegaSorted,sortIdx, ...
     'VariableNames', {'Mode','Frequency_Hz','Omega_rad_s','OriginalIndex'});
 writetable(modalTable, fullfile(outputDir,'ThreeDimFrame_20story_modes.csv'));
 
+% floor load table (user input summary)
+floorTable = table((1:numFloors)', floorLoads, ...
+    'VariableNames', {'Floor','FloorLoad_kN'});
+writetable(floorTable, fullfile(outputDir,'ThreeDimFrame_20story_floorLoads.csv'));
+
 % nodal rotation table (rigid floor rotations)
 ryNodeIds = (1:size(nodeCoordinates,1))';
 ryDof = 6*ryNodeIds - 1;
@@ -167,6 +174,7 @@ fprintf('\nResult tables saved to: %s\n', outputDir);
 fprintf('- ThreeDimFrame_20story_displacements.csv\n');
 fprintf('- ThreeDimFrame_20story_reactions.csv\n');
 fprintf('- ThreeDimFrame_20story_modes.csv\n');
+fprintf('- ThreeDimFrame_20story_floorLoads.csv\n');
 fprintf('- ThreeDimFrame_20story_external_loads.csv\n');
 fprintf('- ThreeDimFrame_20story_node_rotations.csv\n');
 

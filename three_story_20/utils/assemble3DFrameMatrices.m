@@ -1,11 +1,37 @@
 function [stiffness, mass, force, GDof, topNode, topLoadDof] = ...
     assemble3DFrameMatrices(numFloors, nodeCoordinates, elementNodes, ...
-    E, A, Iz, Iy, G, J, rho, topLoad)
+    E, A, Iz, Iy, G, J, rho, topLoad, floorLoad, floorLoadDof)
 numberNodes = size(nodeCoordinates,1);
 numberElements = size(elementNodes,1);
 GDof = 6*numberNodes;
 if nargin < 10 || isempty(topLoad)
     topLoad = 0;
+end
+if nargin < 11 || isempty(floorLoad)
+    floorLoad = zeros(numFloors,1);
+end
+if isscalar(floorLoad)
+    floorLoad = floorLoad * ones(numFloors,1);
+end
+if numel(floorLoad) ~= numFloors
+    error("assemble3DFrameMatrices: floorLoad size must match numFloors");
+end
+if nargin < 12 || isempty(floorLoadDof)
+    floorLoadDof = 1;  % UX
+end
+if ischar(floorLoadDof) || isstring(floorLoadDof)
+    switch upper(string(floorLoadDof))
+        case "UX", floorLoadDof = 1;
+        case "UY", floorLoadDof = 2;
+        case "UZ", floorLoadDof = 3;
+        case "RX", floorLoadDof = 4;
+        case "RY", floorLoadDof = 5;
+        case "RZ", floorLoadDof = 6;
+        otherwise, error("assemble3DFrameMatrices: unknown floorLoadDof '%s'", floorLoadDof);
+    end
+end
+if ~isscalar(floorLoadDof) || floorLoadDof < 1 || floorLoadDof > 6
+    error("assemble3DFrameMatrices: floorLoadDof must be 1..6");
 end
 
 % top node load (positive in +X; negative value means -X direction)
@@ -14,6 +40,17 @@ topLoadDof = 6*topNode - 5;      % UX of topNode
 force = zeros(GDof,1);
 if topLoad ~= 0
     force(topLoadDof) = topLoad;
+end
+
+% floor loads: applied at each floor, equally distributed to 4 corner nodes on that floor
+for iFloor = 1:numFloors
+    loadValue = floorLoad(iFloor);
+    if loadValue == 0
+        continue;
+    end
+    floorNodes = (4*(iFloor-1)+1):(4*iFloor);
+    floorDof = 6*(floorNodes - 1) + floorLoadDof;
+    force(floorDof) = force(floorDof) + (loadValue/4);
 end
 
 stiffness = formStiffness3DframeInternal(GDof, numberElements, elementNodes, ...
