@@ -252,42 +252,75 @@ for e = 1:numberElements
 end
 
 function nodeWeights = computeAreaLikeWeights(nodeXZ)
-nodeWeights = ones(size(nodeXZ,1),1);
 numNodes = size(nodeXZ,1);
+if numNodes == 0
+    nodeWeights = zeros(0,1);
+    return;
+end
 if numNodes <= 2
     nodeWeights = ones(numNodes,1) / numNodes;
     return;
 end
 
-x = nodeXZ(:,1);
-z = nodeXZ(:,2);
-center = [mean(x), mean(z)];
-dx = x - center(1);
-dz = z - center(2);
-theta = atan2(dz, dx);
+xyAll = nodeXZ(:,1:2);
+nodeIds = (1:numNodes)';
+
+% Sort nodes to form floor polygon in x-z plane and compute centroid
+theta0 = atan2(xyAll(:,2) - mean(xyAll(:,2)), xyAll(:,1) - mean(xyAll(:,1)));
+[~, order0] = sort(theta0);
+xy = xyAll(order0,:);
+nodeIds = nodeIds(order0);
+
+area2 = 0.0;
+for i = 1:numNodes
+    j = mod(i,numNodes) + 1;
+    area2 = area2 + xy(i,1)*xy(j,2) - xy(j,1)*xy(i,2);
+end
+
+if abs(area2) < 1e-14
+    nodeWeights = ones(numNodes,1) / numNodes;
+    return;
+end
+
+if area2 < 0
+    xy = flipud(xy);
+    area2 = -area2;
+    nodeIds = flipud(nodeIds);
+end
+
+centroid = [0, 0];
+for i = 1:numNodes
+    j = mod(i,numNodes) + 1;
+    crossVal = xy(i,1)*xy(j,2) - xy(j,1)*xy(i,2);
+    centroid(1) = centroid(1) + (xy(i,1) + xy(j,1)) * crossVal;
+    centroid(2) = centroid(2) + (xy(i,2) + xy(j,2)) * crossVal;
+end
+centroid = centroid / (3*area2);
+
+% Reorder once more around centroid so sector partition is consistent
+theta = atan2(xy(:,2)-centroid(2), xy(:,1)-centroid(1));
 [~, order] = sort(theta);
-x = x(order);
-z = z(order);
+xy = xy(order,:);
 
 edgeSector = zeros(numNodes,1);
 for i = 1:numNodes
     j = mod(i,numNodes) + 1;
-    p = x(i) - center(1);
-    q = z(i) - center(2);
-    pNext = x(j) - center(1);
-    qNext = z(j) - center(2);
-    triArea = 0.5 * abs(p*qNext - pNext*q);
+    p = xy(i,:) - centroid;
+    q = xy(j,:) - centroid;
+    triArea = 0.5 * abs(p(1)*q(2) - p(2)*q(1));
     edgeSector(i) = edgeSector(i) + 0.5*triArea;
     edgeSector(j) = edgeSector(j) + 0.5*triArea;
 end
 
 if all(edgeSector < 1e-14)
     nodeWeights = ones(numNodes,1) / numNodes;
-else
-    nodeWeights = edgeSector / sum(edgeSector);
+    return;
 end
 
-invOrder = zeros(numNodes,1);
-invOrder(order) = (1:numNodes)';
-nodeWeights = nodeWeights(invOrder);
+nodeWeightsSorted = edgeSector / sum(edgeSector);
+
+% Restore original node ordering
+restoreNodeIds = nodeIds(order);
+nodeWeights = zeros(numNodes,1);
+nodeWeights(restoreNodeIds) = nodeWeightsSorted;
 end
