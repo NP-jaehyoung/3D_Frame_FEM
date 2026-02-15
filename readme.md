@@ -11,6 +11,7 @@
 - `ThreeDimFrame_2.m` : 소규모 3D 프레임 예제
 - `ThreeDimFrame_12_18.m` : 12~18층 계열 변형 예제
 - `ThreeDimFrame_20story.m` : 20층 3D 프레임 예제 (최신)
+- `ThreeDimFrame_20story_ode45.m` : 지반 가속도 입력 기반 ODE45 동적응답 예제
 - `drawingMesh.m`, `loading.m` : 메쉬/하중 관련 보조 함수
 - `README.md` : 기존 짧은 기본 안내
 - `.gitignore` : `.DS_Store` 등 불필요 파일 제외
@@ -52,6 +53,8 @@
    - `ThreeDimFrame_20story_displacements.csv`
    - `ThreeDimFrame_20story_reactions.csv`
    - `ThreeDimFrame_20story_modes.csv`
+   - `ThreeDimFrame_20story_ode45_topHistory.csv`
+   - `ThreeDimFrame_20story_ode45_storyDrift.csv`
 
 ## 라이선스
 - `LICENSE` 참고
