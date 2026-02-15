@@ -40,6 +40,11 @@ G = E/(2*(1+nu));
 floorLoads = zeros(numFloors,1);            % per-floor lateral loads [kN] for static preload
 floorLoadDistribution = "AREA";             % UNIFORM or AREA
 % floorLoads = -3000 * ones(numFloors,1);   % (uncomment for distributed static lateral loads)
+includeDeadLoadAsMass = true;              % convert dead load to mass contribution
+floorDeadLoadKiloNewton = zeros(numFloors,1); % dead load [kN] per floor, positive for downward load
+deadLoadDistribution = "AREA";             % UNIFORM or AREA
+deadLoadAcceleration = 9.81;               % conversion g (m/s^2)
+includeStaticForcesInDynamic = false;       % keep ground-motion-only response in dynamic script
 
 %% time history settings
 timeEnd = 20;               % sec
@@ -63,9 +68,22 @@ zeta1 = dampingRatio;
 [stiffness, mass, force, GDof, topNode] = ...
     assemble3DFrameMatrices(numFloors, nodeCoordinates, elementNodes, ...
     E, A, Iz, Iy, G, J, rho, 0, floorLoads, "UX", floorNodeIds, floorLoadDistribution);
+
+if includeDeadLoadAsMass
+    floorMass = abs(floorDeadLoadKiloNewton) / deadLoadAcceleration;
+    massAll = addDeadLoadMassToLumpedNodes(numFloors, mass, nodeCoordinates, ...
+        floorNodeIds, floorMass, deadLoadDistribution);
+else
+    massAll = mass;
+end
 stiffnessAll = stiffness;
-massAll = mass;
 forceAll = force;
+
+if includeDeadLoadAsMass
+    totalDeadMass = sum(floorMass);
+    fprintf("Dead load converted to added mass: total = %.6f [mass unit], distribution = %s\n", ...
+        totalDeadMass, deadLoadDistribution);
+end
 
 %% rigid diaphragm constraints: tie all nodes by floor in UX, UZ, RY (dx, dz, ry)
 [stiffness, mass, force, T, dofToReduced] = ...
@@ -111,6 +129,12 @@ baseLoadActive = baseLoadReduced(activeDof);
 agFun = @(t) interp1(time, groundAcceleration, t, 'pchip', 0);
 odeRhs = @(t, y) ode45StateRhs3DFrame(t, y, Mff, Cff, Kff, baseLoadActive, agFun);
 y0 = zeros(2*size(Kff,1),1);    % [u; v]
+
+if includeStaticForcesInDynamic && any(abs(forceAll) > 1e-12)
+    forceReduced = T' * forceAll;
+    forceActive = forceReduced(activeDof);
+    y0(1:size(Kff,1),1) = Mff \ forceActive;
+end
 odeOptions = odeset('RelTol',1e-6, 'AbsTol',1e-8);
 [timeSol, ySol] = ode45(odeRhs, time, y0, odeOptions);
 
@@ -168,6 +192,11 @@ fprintf("Peak top UX = %.6e m\n", max(abs(topUx)));
 fprintf("Peak top UY = %.6e m\n", max(abs(topUy)));
 fprintf("Peak top UZ = %.6e m\n", max(abs(topUz)));
 fprintf("Max story drift=%.6e m at story %.1f m\n", maxDriftValue, maxDriftFloor);
+if includeStaticForcesInDynamic
+    fprintf("Dynamic response includes static force preload (`floorLoads`, `topLoad`)\n");
+else
+    fprintf("Dynamic response uses ground acceleration only (no static preload force)\n");
+end
 
 %% plotting
 figure('Name','Input ground acceleration');
@@ -229,3 +258,125 @@ writetable(storyTable, fullfile(outputDir,'ThreeDimFrame_20story_ode45_storyDrif
 fprintf('\nResult tables saved to: %s\n', outputDir);
 fprintf('- ThreeDimFrame_20story_ode45_topHistory.csv\n');
 fprintf('- ThreeDimFrame_20story_ode45_storyDrift.csv\n');
+
+function massAll = addDeadLoadMassToLumpedNodes(numFloors, massAll, nodeCoordinates, ...
+    floorNodeIds, floorMass, distribution)
+if nargin < 6 || isempty(distribution)
+    distribution = "UNIFORM";
+end
+distribution = upper(string(distribution));
+if isscalar(floorMass)
+    floorMass = floorMass * ones(numFloors,1);
+end
+if numel(floorMass) ~= numFloors
+    error("addDeadLoadMassToLumpedNodes: floorMass size must match numFloors");
+end
+if ischar(floorMass) || isstring(floorMass)
+    error("addDeadLoadMassToLumpedNodes: floorMass must be numeric.");
+end
+
+switch distribution
+    case {"UNIFORM","EQUAL","POINT"}
+        distribution = "UNIFORM";
+    case {"AREA","GEOMETRIC","GEOMETRY"}
+        distribution = "AREA";
+    otherwise
+        error("addDeadLoadMassToLumpedNodes: unsupported distribution '%s'", distribution);
+end
+
+if isempty(floorNodeIds)
+    error("addDeadLoadMassToLumpedNodes: floorNodeIds is empty.");
+end
+
+for iFloor = 1:numFloors
+    if isempty(floorNodeIds{iFloor})
+        continue;
+    end
+    floorNodes = floorNodeIds{iFloor};
+    if distribution == "UNIFORM"
+        nodeWeights = ones(numel(floorNodes),1) / numel(floorNodes);
+    else
+        nodeWeights = computeAreaLikeWeights(nodeCoordinates(floorNodes, [1,3]));
+    end
+    if abs(sum(nodeWeights) - 1) > 1e-10
+        nodeWeights = nodeWeights / max(sum(nodeWeights),eps);
+    end
+    nodeMass = floorMass(iFloor) * nodeWeights(:);
+    for j = 1:numel(floorNodes)
+        dofs = 6*(floorNodes(j)-1) + (1:3);
+        massAll(dofs, dofs) = massAll(dofs, dofs) + diag(nodeMass(j) * ones(3,1));
+    end
+end
+end
+
+function nodeWeights = computeAreaLikeWeights(nodeXZ)
+numNodes = size(nodeXZ,1);
+if numNodes == 0
+    nodeWeights = zeros(0,1);
+    return;
+end
+if numNodes <= 2
+    nodeWeights = ones(numNodes,1) / numNodes;
+    return;
+end
+
+xyAll = nodeXZ(:,1:2);
+nodeIds = (1:numNodes)';
+
+theta0 = atan2(xyAll(:,2) - mean(xyAll(:,2)), xyAll(:,1) - mean(xyAll(:,1)));
+[~, order0] = sort(theta0);
+xy = xyAll(order0,:);
+nodeIds = nodeIds(order0);
+
+area2 = 0.0;
+for i = 1:numNodes
+    j = mod(i,numNodes) + 1;
+    area2 = area2 + xy(i,1)*xy(j,2) - xy(j,1)*xy(i,2);
+end
+if abs(area2) < 1e-14
+    nodeWeights = ones(numNodes,1) / numNodes;
+    return;
+end
+
+if area2 < 0
+    xy = flipud(xy);
+    area2 = -area2;
+    nodeIds = flipud(nodeIds);
+end
+
+centroid = [0, 0];
+for i = 1:numNodes
+    j = mod(i,numNodes) + 1;
+    crossVal = xy(i,1)*xy(j,2) - xy(j,1)*xy(i,2);
+    centroid(1) = centroid(1) + (xy(i,1) + xy(j,1)) * crossVal;
+    centroid(2) = centroid(2) + (xy(i,2) + xy(j,2)) * crossVal;
+end
+centroid = centroid / (3*area2);
+
+theta = atan2(xy(:,2)-centroid(2), xy(:,1)-centroid(1));
+[~, order] = sort(theta);
+xy = xy(order,:);
+nodeIds = nodeIds(order);
+
+edgeSector = zeros(numNodes,1);
+for i = 1:numNodes
+    j = mod(i,numNodes) + 1;
+    p = xy(i,:) - centroid;
+    q = xy(j,:) - centroid;
+    triArea = 0.5 * abs(p(1)*q(2) - p(2)*q(1));
+    edgeSector(i) = edgeSector(i) + 0.5*triArea;
+    edgeSector(j) = edgeSector(j) + 0.5*triArea;
+end
+
+if all(edgeSector < 1e-14)
+    nodeWeights = ones(numNodes,1) / numNodes;
+    return;
+end
+
+nodeWeightsSorted = edgeSector / sum(edgeSector);
+
+% Restore original node ordering
+restoreNodeIds = nodeIds;
+nodeWeights = zeros(numNodes,1);
+nodeWeights(restoreNodeIds) = nodeWeightsSorted;
+end
