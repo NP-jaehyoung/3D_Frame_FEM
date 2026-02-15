@@ -42,7 +42,7 @@ stiffnessAll = stiffness;
 massAll = mass;
 forceAll = force;
 
-%% rigid diaphragm constraints: tie all nodes by floor in UX, UZ, RY (dx, dz, ry)
+%% rigid diaphragm constraints: full rigid-floor coupling (UX,UY,UZ with RX,RY,RZ)
 [stiffness, mass, force, T, dofToReduced] = ...
     applyRigidDiaphragmConstraints(stiffnessAll, massAll, forceAll, ...
     nodeCoordinates, 2, numFloors);
@@ -126,13 +126,17 @@ modalTable = table(modeId,freqHzSorted,omegaSorted,sortIdx, ...
     'VariableNames', {'Mode','Frequency_Hz','Omega_rad_s','OriginalIndex'});
 writetable(modalTable, fullfile(outputDir,'ThreeDimFrame_20story_modes.csv'));
 
-% nodal rotation table (RY only: torsional rotation about global Y)
+% nodal rotation table (rigid floor rotations)
 ryNodeIds = (1:size(nodeCoordinates,1))';
 ryDof = 6*ryNodeIds - 1;
+rzDof = 6*ryNodeIds;
+rxDof = 6*ryNodeIds - 2;
+rxValue = displacements(rxDof);
 ryValue = displacements(ryDof);
-ryTable = table(ryDof, ryNodeIds, ryValue, ...
-    'VariableNames', {'DOF','Node','RY_Rad'});
-writetable(ryTable, fullfile(outputDir,'ThreeDimFrame_20story_node_RY.csv'));
+rzValue = displacements(rzDof);
+rotTable = table(rxDof, ryDof, rzDof, ryNodeIds, rxValue, ryValue, rzValue, ...
+    'VariableNames', {'DOF_RX','DOF_RY','DOF_RZ','Node','RX_Rad','RY_Rad','RZ_Rad'});
+writetable(rotTable, fullfile(outputDir,'ThreeDimFrame_20story_node_rotations.csv'));
 
 % applied load table (per DOF)
 loadDof = find(abs(forceAll) > 1e-12);
@@ -164,7 +168,7 @@ fprintf('- ThreeDimFrame_20story_displacements.csv\n');
 fprintf('- ThreeDimFrame_20story_reactions.csv\n');
 fprintf('- ThreeDimFrame_20story_modes.csv\n');
 fprintf('- ThreeDimFrame_20story_external_loads.csv\n');
-fprintf('- ThreeDimFrame_20story_node_RY.csv\n');
+fprintf('- ThreeDimFrame_20story_node_rotations.csv\n');
 
 %% plotting
 plotScale = 40;  % deformation magnification for visibility
@@ -256,7 +260,7 @@ else
 end
 title('3D frame (top load case)');
 
-% torsion shape at each floor (UX/UZ rotation RY)
+% torsion shape at each floor (in-plane rigid rotation RY)
 figure('Name','20-story floor torsion');
 hold on; grid on; axis equal; view(35,25);
 for iFloor = 1:numel(floorLevels)
