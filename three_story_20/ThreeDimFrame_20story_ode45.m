@@ -20,10 +20,22 @@ rho = 7850;                % density
 width = 1;                 
 depth = 1;                 
 A = width*depth;           % area [m^2]
-Iy = 1/12;
-Iz = 1/12;
+if width <= 0 || depth <= 0
+    error("width and depth must be positive.");
+end
+Iy = width*depth^3/12;      % second moment about local y
+Iz = depth*width^3/12;      % second moment about local z
 nu = 0.167;
-J = 2.25*1^4;             
+if width >= depth
+    ar = depth/width;
+    J = depth * width^3 * (1/3 - 0.21*ar + 0.063*ar^5);
+else
+    ar = width/depth;
+    J = width * depth^3 * (1/3 - 0.21*ar + 0.063*ar^5);
+end
+if J <= 0
+    error("Invalid torsional constant J (non-positive). Check width/depth.");
+end
 G = E/(2*(1+nu));
 floorLoads = zeros(numFloors,1);            % per-floor lateral loads [kN] for static preload
 % floorLoads = -3000 * ones(numFloors,1);   % (uncomment for distributed static lateral loads)
