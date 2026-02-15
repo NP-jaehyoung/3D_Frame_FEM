@@ -159,6 +159,76 @@ fprintf('- ThreeDimFrame_20story_displacements.csv\n');
 fprintf('- ThreeDimFrame_20story_reactions.csv\n');
 fprintf('- ThreeDimFrame_20story_modes.csv\n');
 
+%% plotting
+plotScale = 40;  % deformation magnification for visibility
+
+% nodal coordinates
+nodeDisplacement = [displacements(1:6:end), displacements(2:6:end), ...
+    displacements(3:6:end)];
+deformedCoords = nodeCoordinates + plotScale * nodeDisplacement;
+
+% undeformed/deformed frame shape
+figure('Name','20-story 3D frame shape');
+hold on; grid on; axis equal; view(35,20);
+for e = 1:numberElements
+    n1 = elementNodes(e,1);
+    n2 = elementNodes(e,2);
+    p1 = nodeCoordinates(n1,:);
+    p2 = nodeCoordinates(n2,:);
+    p1d = deformedCoords(n1,:);
+    p2d = deformedCoords(n2,:);
+    plot3([p1(1) p2(1)], [p1(2) p2(2)], [p1(3) p2(3)], 'k-', 'LineWidth', 1.0);
+    plot3([p1d(1) p2d(1)], [p1d(2) p2d(2)], [p1d(3) p2d(3)], ...
+        'r--', 'LineWidth', 1.5);
+end
+xlabel('X'); ylabel('Y'); zlabel('Z');
+legend({'Original','Deformed (scaled)'}, 'Location', 'best');
+title('3D frame (top load case)');
+
+% story-level drift / top-node displacement by floor
+floorLevels = unique(nodeCoordinates(:,2),'stable');
+storyUx = zeros(numel(floorLevels),1);
+storyUy = zeros(numel(floorLevels),1);
+storyUz = zeros(numel(floorLevels),1);
+for iFloor = 1:numel(floorLevels)
+    floorNodes = find(abs(nodeCoordinates(:,2)-floorLevels(iFloor)) < 1e-9);
+    storyUx(iFloor) = mean(abs(nodeDisplacement(floorNodes,1)));
+    storyUy(iFloor) = mean(abs(nodeDisplacement(floorNodes,2)));
+    storyUz(iFloor) = mean(abs(nodeDisplacement(floorNodes,3)));
+end
+
+figure('Name','Story deformation profile');
+subplot(1,3,1);
+plot(storyUx, floorLevels, 'o-', 'LineWidth', 1.2);
+grid on; xlabel('Mean |UX| [m]'); ylabel('Height [m]');
+title('Story mean UX');
+subplot(1,3,2);
+plot(storyUy, floorLevels, 'o-', 'LineWidth', 1.2);
+grid on; xlabel('Mean |UY| [m]'); ylabel('Height [m]');
+title('Story mean UY');
+subplot(1,3,3);
+plot(storyUz, floorLevels, 'o-', 'LineWidth', 1.2);
+grid on; xlabel('Mean |UZ| [m]'); ylabel('Height [m]');
+title('Story mean UZ');
+
+% 1st mode shape in X direction by floor
+if ~isempty(modes)
+    mode1 = modes(:,1);
+    mode1Coords = [mode1(1:6:end), mode1(2:6:end), mode1(3:6:end)];
+    firstModeFloor = zeros(numel(floorLevels),1);
+    for iFloor = 1:numel(floorLevels)
+        floorNodes = find(abs(nodeCoordinates(:,2)-floorLevels(iFloor)) < 1e-9);
+        firstModeFloor(iFloor) = mean(abs(mode1Coords(floorNodes,1)));
+    end
+    if max(firstModeFloor) > 0
+        firstModeFloor = firstModeFloor / max(firstModeFloor);
+    end
+    figure('Name','1st mode shape (normalized, UX component)');
+    plot(firstModeFloor, floorLevels, 's-', 'LineWidth', 1.5, 'MarkerSize',6);
+    grid on; xlabel('Normalized UX mode shape'); ylabel('Height [m]');
+    title('First modal shape by floor');
+end
+
 %% local functions
 function  [stiffness]=formStiffness3Dframe(GDof,numberElements,elementNodes,numberNodes,nodeCoordinates,E,A,Iz,Iy,G,J);
 stiffness = zeros(GDof);
