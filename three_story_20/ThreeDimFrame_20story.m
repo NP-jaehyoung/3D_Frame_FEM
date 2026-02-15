@@ -126,6 +126,14 @@ modalTable = table(modeId,freqHzSorted,omegaSorted,sortIdx, ...
     'VariableNames', {'Mode','Frequency_Hz','Omega_rad_s','OriginalIndex'});
 writetable(modalTable, fullfile(outputDir,'ThreeDimFrame_20story_modes.csv'));
 
+% nodal rotation table (RY only: torsional rotation about global Y)
+ryNodeIds = (1:size(nodeCoordinates,1))';
+ryDof = 6*ryNodeIds - 1;
+ryValue = displacements(ryDof);
+ryTable = table(ryDof, ryNodeIds, ryValue, ...
+    'VariableNames', {'DOF','Node','RY_Rad'});
+writetable(ryTable, fullfile(outputDir,'ThreeDimFrame_20story_node_RY.csv'));
+
 % applied load table (per DOF)
 loadDof = find(abs(forceAll) > 1e-12);
 loadNode = ceil(loadDof/6);
@@ -156,14 +164,40 @@ fprintf('- ThreeDimFrame_20story_displacements.csv\n');
 fprintf('- ThreeDimFrame_20story_reactions.csv\n');
 fprintf('- ThreeDimFrame_20story_modes.csv\n');
 fprintf('- ThreeDimFrame_20story_external_loads.csv\n');
+fprintf('- ThreeDimFrame_20story_node_RY.csv\n');
 
 %% plotting
 plotScale = 40;  % deformation magnification for visibility
+
+floorLevels = unique(nodeCoordinates(:,2),'stable');
 
 % nodal coordinates
 nodeDisplacement = [displacements(1:6:end), displacements(2:6:end), ...
     displacements(3:6:end)];
 deformedCoords = nodeCoordinates + plotScale * nodeDisplacement;
+% torsion-aware coordinates (add rigid floor RY rotation effect)
+floorTorsionCoords = zeros(size(nodeCoordinates));
+for iFloor = 1:numel(floorLevels)
+    floorNodes = find(abs(nodeCoordinates(:,2)-floorLevels(iFloor)) < 1e-9);
+    if isempty(floorNodes)
+        continue;
+    end
+    floorCentroid = mean(nodeCoordinates(floorNodes,:),1);
+    theta = mean(displacements(6*floorNodes-1)); % representative floor RY
+    c = cos(theta);
+    s = sin(theta);
+    for j = 1:numel(floorNodes)
+        nId = floorNodes(j);
+        basePoint = nodeCoordinates(nId,:);
+        localVec = basePoint - floorCentroid;
+        transVec = [displacements(6*nId-5), displacements(6*nId-4), displacements(6*nId-3)];
+        rotVec = [c*localVec(1) + s*localVec(3), 0, -s*localVec(1) + c*localVec(3)];
+        floorTorsionCoords(nId,:) = (floorCentroid + transVec) + [rotVec(1)-localVec(1), transVec(2), rotVec(3)-localVec(3)];
+    end
+end
+
+% floor polygon connectivity
+quadOrder = [1,2,3,4,1];
 
 % undeformed/deformed frame shape
 figure('Name','20-story 3D frame shape');
@@ -222,8 +256,28 @@ else
 end
 title('3D frame (top load case)');
 
+% torsion shape at each floor (UX/UZ rotation RY)
+figure('Name','20-story floor torsion');
+hold on; grid on; axis equal; view(35,25);
+for iFloor = 1:numel(floorLevels)
+    floorNodes = (4*(iFloor-1)+1):(4*iFloor);
+    baseFloor = nodeCoordinates(floorNodes,:);
+    torsFloor = floorTorsionCoords(floorNodes,:);
+    plot3(baseFloor(quadOrder,1), baseFloor(quadOrder,2), baseFloor(quadOrder,3), ...
+        'k-', 'LineWidth',1.0);
+    plot3(torsFloor(quadOrder,1), torsFloor(quadOrder,2), torsFloor(quadOrder,3), ...
+        'm--', 'LineWidth',2.0);
+    c = mean(torsFloor(:,1));
+    d = mean(torsFloor(:,2));
+    e = mean(torsFloor(:,3));
+    text(c, d, e, sprintf('f%02d RY=%+.4e', iFloor, mean(displacements(floorNodes*6-1))), ...
+        'FontSize', 8, 'Color',[0.5 0 0.5], 'FontWeight','bold');
+end
+xlabel('X'); ylabel('Y'); zlabel('Z');
+title('Rigid-floor twist (RY) visualization');
+legend({'Original floor','RY-rotated floor'}, 'Location', 'best');
+
 % story-level drift / top-node displacement by floor
-floorLevels = unique(nodeCoordinates(:,2),'stable');
 storyUx = zeros(numel(floorLevels),1);
 storyUy = zeros(numel(floorLevels),1);
 storyUz = zeros(numel(floorLevels),1);
