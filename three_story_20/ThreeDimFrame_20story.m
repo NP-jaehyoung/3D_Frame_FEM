@@ -38,11 +38,12 @@ if J <= 0
     error("Invalid torsional constant J (non-positive). Check width/depth.");
 end
 G = E/(2*(1+nu));
-topLoadNode = 4 * numFloors;              % concentrated load target node (default: top floor node 80)
-topLoadValue = -3000;                     % concentrated load magnitude [kN]
-topLoadDirection = "UX";                  % UX/UY/UZ/RX/RY/RZ
-floorLoads = zeros(numFloors,1);           % floor lateral load per level [kN]
-floorLoadDistribution = "AREA";            % UNIFORM or AREA
+pointLoadNode = 4 * numFloors;              % concentrated load target node (default: top floor node 80)
+pointLoadValue = -3000;                     % concentrated load magnitude [kN]
+pointLoadDirection = "UX";                  % UX/UY/UZ/RX/RY/RZ
+distributedFloorLoads = zeros(numFloors,1);  % distributed floor lateral load per level [kN]
+distributedFloorLoadDirection = "UY";        % UX/UY/UZ/RX/RY/RZ
+distributedFloorLoadDistribution = "AREA";    % UNIFORM or AREA
 
 %% mesh and loads
 [nodeCoordinates, elementNodes, floorNodeIds] = build3DFrameGeometry(numFloors, floorHeight, spanX, spanZ);
@@ -51,28 +52,28 @@ numberElements = size(elementNodes,1);
 %% assemble K, M
 [stiffness, mass, force, GDof, topNode, topLoadDof] = ...
     assemble3DFrameMatrices(numFloors, nodeCoordinates, elementNodes, ...
-    E, A, Iz, Iy, G, J, rho, 0, floorLoads, "UX", ...
-    floorNodeIds, floorLoadDistribution);
+    E, A, Iz, Iy, G, J, rho, 0, distributedFloorLoads, ...
+    distributedFloorLoadDirection, floorNodeIds, distributedFloorLoadDistribution);
 
 % apply single concentrated nodal load
-if topLoadNode < 1 || topLoadNode > size(nodeCoordinates,1)
-    error("topLoadNode must be between 1 and %d", size(nodeCoordinates,1));
+if pointLoadNode < 1 || pointLoadNode > size(nodeCoordinates,1)
+    error("pointLoadNode must be between 1 and %d", size(nodeCoordinates,1));
 end
-if ischar(topLoadDirection) || isstring(topLoadDirection)
-    switch upper(string(topLoadDirection))
+if ischar(pointLoadDirection) || isstring(pointLoadDirection)
+    switch upper(string(pointLoadDirection))
         case "UX", topLoadComp = 1;
         case "UY", topLoadComp = 2;
         case "UZ", topLoadComp = 3;
         case "RX", topLoadComp = 4;
         case "RY", topLoadComp = 5;
         case "RZ", topLoadComp = 6;
-        otherwise, error("Unknown topLoadDirection '%s'", topLoadDirection);
+        otherwise, error("Unknown pointLoadDirection '%s'", pointLoadDirection);
     end
 else
-    topLoadComp = topLoadDirection;
+    topLoadComp = pointLoadDirection;
 end
-targetTopLoadDof = 6*(topLoadNode-1) + topLoadComp;
-force(targetTopLoadDof) = force(targetTopLoadDof) + topLoadValue;
+targetTopLoadDof = 6*(pointLoadNode-1) + topLoadComp;
+force(targetTopLoadDof) = force(targetTopLoadDof) + pointLoadValue;
 stiffnessAll = stiffness;
 massAll = mass;
 forceAll = force;
@@ -96,17 +97,18 @@ reactionSupport = reactions(prescribedDof);
 
 fprintf("20-floor 3D frame example\n");
 fprintf("Concentrated load node: %d, DOF %d, point load: %.4g\n", ...
-    topLoadNode, targetTopLoadDof, topLoadValue);
-fprintf("Concentrated load direction: %s\n", topLoadDirection);
-if any(abs(floorLoads) > 1e-12)
-    fprintf("Floor loads: applied per floor with %s distribution to floor nodes\n", floorLoadDistribution);
+    pointLoadNode, targetTopLoadDof, pointLoadValue);
+fprintf("Concentrated load direction: %s\n", pointLoadDirection);
+if any(abs(distributedFloorLoads) > 1e-12)
+    fprintf("Distributed floor loads: applied per floor with %s distribution to floor nodes\n", ...
+        distributedFloorLoadDistribution);
 else
-    fprintf("Floor loads: none\n");
+    fprintf("Distributed floor loads: none\n");
 end
 fprintf("Loaded node displacement (UX,UY,UZ) [m]\n");
-fprintf("Node %d, UX = %.6e\n", topLoadNode, displacements(targetTopLoadDof));
-fprintf("Node %d, UY = %.6e\n", topLoadNode, displacements(targetTopLoadDof+1));
-fprintf("Node %d, UZ = %.6e\n\n", topLoadNode, displacements(targetTopLoadDof+2));
+fprintf("Node %d, UX = %.6e\n", pointLoadNode, displacements(targetTopLoadDof));
+fprintf("Node %d, UY = %.6e\n", pointLoadNode, displacements(targetTopLoadDof+1));
+fprintf("Node %d, UZ = %.6e\n\n", pointLoadNode, displacements(targetTopLoadDof+2));
 
 fprintf("Support reactions (first 24 DOF)\n");
 for ii = 1:numel(prescribedDof)
@@ -169,7 +171,7 @@ modalTable = table(modeId,freqHzSorted,omegaSorted,sortIdx, ...
 writetable(modalTable, fullfile(outputDir,'ThreeDimFrame_20story_modes.csv'));
 
 % floor load table (user input summary)
-floorTable = table((1:numFloors)', floorLoads, ...
+floorTable = table((1:numFloors)', distributedFloorLoads, ...
     'VariableNames', {'Floor','FloorLoad_kN'});
 writetable(floorTable, fullfile(outputDir,'ThreeDimFrame_20story_floorLoads.csv'));
 
@@ -222,7 +224,7 @@ fprintf('- ThreeDimFrame_20story_external_loads.csv\n');
 fprintf('- ThreeDimFrame_20story_node_rotations.csv\n');
 
 %% plotting
-plotScale = 40;  % deformation magnification for visibility
+plotScale = 1.0;  % no magnification: show real deformation only
 
 floorLevels = unique(nodeCoordinates(:,2),'stable');
 
@@ -305,9 +307,9 @@ end
 
 xlabel('X'); ylabel('Y'); zlabel('Z');
 if isempty(loadDirection)
-    legend({'Original','Deformed (scaled)'}, 'Location', 'best');
+    legend({'Original', 'Deformed'}, 'Location', 'best');
 else
-    legend({'Original','Deformed (scaled)', 'Load vector'}, 'Location', 'best');
+    legend({'Original', 'Deformed', 'Load vector'}, 'Location', 'best');
 end
 title('3D frame (top load case)');
 
