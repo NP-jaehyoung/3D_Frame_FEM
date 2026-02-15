@@ -10,11 +10,20 @@
 - `ThreeDimFrame.m` : 기본 3D 프레임(샘플) 해석
 - `ThreeDimFrame_2.m` : 소규모 3D 프레임 예제
 - `ThreeDimFrame_12_18.m` : 12~18층 계열 변형 예제
-- `ThreeDimFrame_20story.m` : 20층 3D 프레임 예제 (최신)
-- `ThreeDimFrame_20story_ode45.m` : 지반 가속도 입력 기반 ODE45 동적응답 예제
 - `drawingMesh.m`, `loading.m` : 메쉬/하중 관련 보조 함수
 - `README.md` : 기존 짧은 기본 안내
 - `.gitignore` : `.DS_Store` 등 불필요 파일 제외
+
+### `three_story_20/`
+- `ThreeDimFrame_20story.m` : 20층 3D 프레임 정적 해석(변위/반력/고유진동수)
+- `ThreeDimFrame_20story_ode45.m` : 지반 가속도 입력 기반 ODE45 동적거동 예제
+- `utils/` : 20층 예제에서 사용하는 공통 유틸리티 함수
+  - `build3DFrameGeometry.m`
+  - `assemble3DFrameMatrices.m`
+  - `applyRigidDiaphragmConstraints.m`
+  - `solveConstrainedStatic.m`
+  - `solveEigenModes.m`
+  - `ode45StateRhs3DFrame.m`
 
 ### `Problem/`
 교재/연습형 문제 스크립트 모음
@@ -46,14 +55,15 @@
   - 각 층(2층~20층)에서 `UX`, `UZ`, `RY`를 동일화
   - 축소 좌표계 해석 후 전체 좌표계로 복원해 반력까지 계산
 - 공통 모듈화 시작
-  - `build3DFrameGeometry.m`, `assemble3DFrameMatrices.m`, `applyRigidDiaphragmConstraints.m`
-  - `solveConstrainedStatic.m`, `solveEigenModes.m`, `ode45StateRhs3DFrame.m`
-  - 두 메인 스크립트(`ThreeDimFrame_20story.m`, `ThreeDimFrame_20story_ode45.m`)가 동일한 함수를 공유
+  - `three_story_20/utils/` 폴더의 스크립트를 통해 `ThreeDimFrame_20story.m`와
+    `ThreeDimFrame_20story_ode45.m`가 공통 함수를 공유
 
 ## 실행 가이드 (MATLAB)
-1. MATLAB 작업 폴더를 저장소 루트로 이동
-2. `ThreeDimFrame_20story.m` 실행
-3. 결과는 `results/` 폴더의 CSV로 확인
+1. MATLAB 작업 폴더를 `three_story_20` 폴더로 이동
+   - `cd(".../3D_Frame_FEM/three_story_20")`
+2. `ThreeDimFrame_20story` 실행 (정적/고유진동수) 또는  
+   `ThreeDimFrame_20story_ode45` 실행 (동적거동)
+3. 결과는 `three_story_20/results/` 폴더의 CSV로 확인
    - `ThreeDimFrame_20story_displacements.csv`
    - `ThreeDimFrame_20story_reactions.csv`
    - `ThreeDimFrame_20story_modes.csv`
