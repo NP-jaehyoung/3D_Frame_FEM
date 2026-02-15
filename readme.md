@@ -11,7 +11,7 @@
 - `ThreeDimFrame_2.m` : 소규모 3D 프레임 예제
 - `ThreeDimFrame_12_18.m` : 12~18층 계열 변형 예제
 - `drawingMesh.m`, `loading.m` : 메쉬/하중 관련 보조 함수
-- `README.md` : 기존 짧은 기본 안내
+- `readme.md` : 기존 짧은 기본 안내
 - `.gitignore` : `.DS_Store` 등 불필요 파일 제외
 
 ### `three_story_20/`
