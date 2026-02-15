@@ -174,6 +174,11 @@ loadTable = table(loadDof,loadNode,loadCompName,loadValue, ...
     'VariableNames', {'DOF','Node','Component','AppliedLoad'});
 writetable(loadTable, fullfile(outputDir,'ThreeDimFrame_20story_external_loads.csv'));
 
+loadDirection = loadDof;
+if isempty(loadDirection)
+    loadDirection = [];
+end
+
 fprintf("Applied loads (non-zero DOF)\n");
 for ii = 1:numel(loadDof)
     fprintf("DOF %d (Node %d, %s) : %+13.6e [kN]\n", ...
