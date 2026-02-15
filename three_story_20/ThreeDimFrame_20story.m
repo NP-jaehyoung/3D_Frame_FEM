@@ -71,6 +71,9 @@ for ii = 1:numel(prescribedDof)
     fprintf("DOF %d : %+13.6e\n", prescribedDof(ii), reactionSupport(ii));
 end
 
+%% support reaction summary: translational load extraction prepared
+fprintf("Applied load extraction will be written after GDof definition.\n");
+
 %% modal analysis
 maxModesToShow = 10;
 [modesReduced,eigenvalues] = solveEigenModes(size(stiffness,1), ...
@@ -123,10 +126,36 @@ modalTable = table(modeId,freqHzSorted,omegaSorted,sortIdx, ...
     'VariableNames', {'Mode','Frequency_Hz','Omega_rad_s','OriginalIndex'});
 writetable(modalTable, fullfile(outputDir,'ThreeDimFrame_20story_modes.csv'));
 
+% applied load table (per DOF)
+loadDof = find(abs(forceAll) > 1e-12);
+loadNode = ceil(loadDof/6);
+loadCompIndex = mod(loadDof-1,6)+1;
+loadValue = forceAll(loadDof);
+loadCompName = compNames(loadCompIndex)';
+
+loadDof = loadDof(:);
+loadNode = loadNode(:);
+loadCompIndex = loadCompIndex(:);
+loadValue = loadValue(:);
+loadCompName = loadCompName(:);
+loadDirection = loadCompName(loadCompIndex <= 3); % translational for arrows
+loadMoment = loadCompName(loadCompIndex >= 4);    % rotational DOFs (shown in table only)
+
+loadTable = table(loadDof,loadNode,loadCompName,loadValue, ...
+    'VariableNames', {'DOF','Node','Component','AppliedLoad'});
+writetable(loadTable, fullfile(outputDir,'ThreeDimFrame_20story_external_loads.csv'));
+
+fprintf("Applied loads (non-zero DOF)\n");
+for ii = 1:numel(loadDof)
+    fprintf("DOF %d (Node %d, %s) : %+13.6e [kN]\n", ...
+        loadDof(ii), loadNode(ii), loadCompName{ii}, loadValue(ii));
+end
+
 fprintf('\nResult tables saved to: %s\n', outputDir);
 fprintf('- ThreeDimFrame_20story_displacements.csv\n');
 fprintf('- ThreeDimFrame_20story_reactions.csv\n');
 fprintf('- ThreeDimFrame_20story_modes.csv\n');
+fprintf('- ThreeDimFrame_20story_external_loads.csv\n');
 
 %% plotting
 plotScale = 40;  % deformation magnification for visibility
@@ -150,8 +179,47 @@ for e = 1:numberElements
     plot3([p1d(1) p2d(1)], [p1d(2) p2d(2)], [p1d(3) p2d(3)], ...
         'r--', 'LineWidth', 1.5);
 end
+
+% draw applied nodal loads (translational components only)
+coordSpan = max(nodeCoordinates) - min(nodeCoordinates);
+baseArrowScale = max(coordSpan);
+if isempty(baseArrowScale) || baseArrowScale == 0
+    baseArrowScale = 1.0;
+end
+transLoadIdx = find(loadCompIndex <= 3);
+if ~isempty(transLoadIdx)
+    maxTransLoad = max(abs(loadValue(transLoadIdx)));
+    if maxTransLoad > 0
+        arrowScale = 0.30 * baseArrowScale / maxTransLoad;
+    else
+        arrowScale = 0;
+    end
+    for ii = transLoadIdx'
+        dirVec = zeros(1,3);
+        switch loadCompIndex(ii)
+            case 1, dirVec = [1,0,0];
+            case 2, dirVec = [0,1,0];
+            case 3, dirVec = [0,0,1];
+        end
+        p = nodeCoordinates(loadNode(ii),:);
+        q = dirVec * (loadValue(ii) * arrowScale);
+        plotTag = "";
+        if abs(loadValue(ii)) >= 1e-12
+            plotTag = sprintf('%s=%+.1f', loadCompName{ii}, loadValue(ii));
+            quiver3(p(1), p(2), p(3), q(1), q(2), q(3), 0, ...
+                'Color',[0.05 0.25 0.85], 'LineWidth',1.5, 'MaxHeadSize',1.0);
+            text(p(1)+0.5*q(1), p(2)+0.5*q(2), p(3)+0.5*q(3), plotTag, ...
+                'FontSize',8, 'Color',[0.05 0.25 0.85], 'FontWeight','bold');
+        end
+    end
+end
+
 xlabel('X'); ylabel('Y'); zlabel('Z');
-legend({'Original','Deformed (scaled)'}, 'Location', 'best');
+if isempty(loadDirection)
+    legend({'Original','Deformed (scaled)'}, 'Location', 'best');
+else
+    legend({'Original','Deformed (scaled)', 'Load vector'}, 'Location', 'best');
+end
 title('3D frame (top load case)');
 
 % story-level drift / top-node displacement by floor
