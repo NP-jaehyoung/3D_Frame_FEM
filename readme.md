@@ -23,6 +23,7 @@ MATLAB 기반 2D/3D 구조물 FEM(유한요소법) 예제 및 문제 풀이 모�
   - `build3DFrameGeometry.m`
   - `assemble3DFrameMatrices.m`
     - `floorLoads`(층별 하중 벡터)와 `floorLoadDof`(예: `"UX"`, `"UY"`, `"RZ"`)를 지원합니다.
+    - 층별 노드 집합을 `floorNodeIds`로 받아 `UNIFORM` 또는 `AREA`(기하 기반) 분배를 지원합니다.
     - `topLoad`(기존 상부 집중하중) + 층별 하중 동시 조합이 가능합니다.
   - `applyRigidDiaphragmConstraints.m`
     - 층별 바닥의 강체 조건을 `UX, UY, UZ, RX, RY, RZ`로 묶어 회전(비틀림) 변형까지 반영합니다.

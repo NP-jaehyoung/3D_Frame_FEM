@@ -1,12 +1,15 @@
 function [stiffness, mass, force, GDof, topNode, topLoadDof] = ...
     assemble3DFrameMatrices(numFloors, nodeCoordinates, elementNodes, ...
-    E, A, Iz, Iy, G, J, rho, topLoad, floorLoad, floorLoadDof)
+    E, A, Iz, Iy, G, J, rho, topLoad, floorLoad, floorLoadDof, ...
+    floorNodeIds, floorLoadDistribution)
 numberNodes = size(nodeCoordinates,1);
 numberElements = size(elementNodes,1);
 GDof = 6*numberNodes;
+
 if nargin < 10 || isempty(topLoad)
     topLoad = 0;
 end
+
 if nargin < 11 || isempty(floorLoad)
     floorLoad = zeros(numFloors,1);
 end
@@ -16,6 +19,7 @@ end
 if numel(floorLoad) ~= numFloors
     error("assemble3DFrameMatrices: floorLoad size must match numFloors");
 end
+
 if nargin < 12 || isempty(floorLoadDof)
     floorLoadDof = 1;  % UX
 end
@@ -34,23 +38,97 @@ if ~isscalar(floorLoadDof) || floorLoadDof < 1 || floorLoadDof > 6
     error("assemble3DFrameMatrices: floorLoadDof must be 1..6");
 end
 
+if nargin < 13 || isempty(floorNodeIds)
+    levels = unique(nodeCoordinates(:,2),'stable');
+    floorNodeIds = cell(numel(levels),1);
+    for iFloor = 1:numel(levels)
+        floorNodes = find(abs(nodeCoordinates(:,2)-levels(iFloor)) < 1e-9);
+        if isempty(floorNodes)
+            floorNodeIds{iFloor} = [];
+        else
+            floorNodeIds{iFloor} = floorNodes(:);
+        end
+    end
+end
+if iscell(floorNodeIds)
+    if numel(floorNodeIds) < numFloors
+        error("assemble3DFrameMatrices: floorNodeIds has fewer floors than numFloors");
+    end
+    floorNodeIds = floorNodeIds(1:numFloors);
+else
+    if size(floorNodeIds,1) == 1 && numFloors > 1
+        error("assemble3DFrameMatrices: floorNodeIds must be provided per floor");
+    end
+    temp = cell(numFloors,1);
+    if size(floorNodeIds,1) == numFloors
+        for iFloor = 1:numFloors
+            ids = floorNodeIds(iFloor,:);
+            temp{iFloor} = ids(ids ~= 0);
+        end
+    elseif size(floorNodeIds,1) > numFloors
+    for iFloor = 1:numFloors
+        temp{iFloor} = floorNodeIds(iFloor,:);
+        temp{iFloor} = temp{iFloor}(temp{iFloor} ~= 0);
+        end
+    else
+        error("assemble3DFrameMatrices: floorNodeIds size is not recognized");
+    end
+    floorNodeIds = temp;
+end
+
+if nargin < 14 || isempty(floorLoadDistribution)
+    floorLoadDistribution = "UNIFORM";
+end
+if ischar(floorLoadDistribution) || isstring(floorLoadDistribution)
+    floorLoadDistribution = upper(string(floorLoadDistribution));
+else
+    error("assemble3DFrameMatrices: floorLoadDistribution must be string");
+end
+switch floorLoadDistribution
+    case {"UNIFORM","EQUAL","POINT"}
+        floorLoadDistribution = "UNIFORM";
+    case {"AREA","GEOMETRIC","GEOMETRY"}
+        floorLoadDistribution = "AREA";
+    otherwise
+        error("assemble3DFrameMatrices: unsupported floorLoadDistribution '%s'", floorLoadDistribution);
+end
+
+if isempty(floorNodeIds)
+    error("assemble3DFrameMatrices: floorNodeIds is empty.");
+end
+topFloorNodes = floorNodeIds{min(numFloors, numel(floorNodeIds))};
+if isempty(topFloorNodes)
+    error("assemble3DFrameMatrices: top floor has no node list.");
+end
+
 % top node load (positive in +X; negative value means -X direction)
-topNode = 4*(numFloors-1) + 3;   % 1st corner node on top floor
+topNode = topFloorNodes(1);
 topLoadDof = 6*topNode - 5;      % UX of topNode
 force = zeros(GDof,1);
 if topLoad ~= 0
     force(topLoadDof) = topLoad;
 end
 
-% floor loads: applied at each floor, equally distributed to 4 corner nodes on that floor
+% floor loads: applied at each floor, distributed to each floor nodes
 for iFloor = 1:numFloors
     loadValue = floorLoad(iFloor);
     if loadValue == 0
         continue;
     end
-    floorNodes = (4*(iFloor-1)+1):(4*iFloor);
+
+    floorNodes = floorNodeIds{iFloor}(:);
+    if isempty(floorNodes)
+        error("assemble3DFrameMatrices: no nodes defined for floor %d", iFloor);
+    end
+
+    if floorLoadDistribution == "UNIFORM"
+        nodeWeights = ones(numel(floorNodes),1) / numel(floorNodes);
+    else
+        nodeWeights = computeAreaLikeWeights(nodeCoordinates(floorNodes, [1,3]));
+    end
+
     floorDof = 6*(floorNodes - 1) + floorLoadDof;
-    force(floorDof) = force(floorDof) + (loadValue/4);
+    force(floorDof) = force(floorDof) + (loadValue * nodeWeights);
 end
 
 stiffness = formStiffness3DframeInternal(GDof, numberElements, elementNodes, ...
@@ -170,5 +248,46 @@ for e = 1:numberElements
         zeros(3,6) Lambda zeros(3);zeros(3,9) Lambda];
     mass(elementDof,elementDof)=...
         mass(elementDof,elementDof)+R'*m*R;
+    end
 end
+
+function nodeWeights = computeAreaLikeWeights(nodeXZ)
+nodeWeights = ones(size(nodeXZ,1),1);
+numNodes = size(nodeXZ,1);
+if numNodes <= 2
+    nodeWeights = ones(numNodes,1) / numNodes;
+    return;
+end
+
+x = nodeXZ(:,1);
+z = nodeXZ(:,2);
+center = [mean(x), mean(z)];
+dx = x - center(1);
+dz = z - center(2);
+theta = atan2(dz, dx);
+[~, order] = sort(theta);
+x = x(order);
+z = z(order);
+
+edgeSector = zeros(numNodes,1);
+for i = 1:numNodes
+    j = mod(i,numNodes) + 1;
+    p = x(i) - center(1);
+    q = z(i) - center(2);
+    pNext = x(j) - center(1);
+    qNext = z(j) - center(2);
+    triArea = 0.5 * abs(p*qNext - pNext*q);
+    edgeSector(i) = edgeSector(i) + 0.5*triArea;
+    edgeSector(j) = edgeSector(j) + 0.5*triArea;
+end
+
+if all(edgeSector < 1e-14)
+    nodeWeights = ones(numNodes,1) / numNodes;
+else
+    nodeWeights = edgeSector / sum(edgeSector);
+end
+
+invOrder = zeros(numNodes,1);
+invOrder(order) = (1:numNodes)';
+nodeWeights = nodeWeights(invOrder);
 end

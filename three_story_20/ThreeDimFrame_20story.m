@@ -38,19 +38,19 @@ if J <= 0
     error("Invalid torsional constant J (non-positive). Check width/depth.");
 end
 G = E/(2*(1+nu));
+topLoad = 0;                          % optional concentrated load at top node
 floorLoads = -3000 * ones(numFloors,1);   % floor lateral load per level [kN]
-topLoad = floorLoads(end);               % for log only: top-floor equivalent point load
+floorLoadDistribution = "AREA";        % UNIFORM or AREA
 
 %% mesh and loads
-[nodeCoordinates, elementNodes] = build3DFrameGeometry(numFloors, floorHeight, spanX, spanZ);
+[nodeCoordinates, elementNodes, floorNodeIds] = build3DFrameGeometry(numFloors, floorHeight, spanX, spanZ);
 numberElements = size(elementNodes,1);
-topNode = 4*(numFloors-1) + 3;
-topLoadDof = 6*topNode - 5;
 
 %% assemble K, M
-[stiffness, mass, force, GDof] = ...
+[stiffness, mass, force, GDof, topNode, topLoadDof] = ...
     assemble3DFrameMatrices(numFloors, nodeCoordinates, elementNodes, ...
-    E, A, Iz, Iy, G, J, rho, 0, floorLoads, "UX");
+    E, A, Iz, Iy, G, J, rho, topLoad, floorLoads, "UX", ...
+    floorNodeIds, floorLoadDistribution);
 stiffnessAll = stiffness;
 massAll = mass;
 forceAll = force;
@@ -73,8 +73,8 @@ reactions = stiffnessAll * displacements - forceAll;
 reactionSupport = reactions(prescribedDof);
 
 fprintf("20-floor 3D frame example\n");
-fprintf("Top node: %d, top load DOF: %d, load: %.4g\n", topNode, topLoadDof, topLoad);
-fprintf("Floor loads: applied per floor (each floor equally distributed to 4 nodes)\n");
+fprintf("Top node: %d, top load DOF: %d, point load: %.4g\n", topNode, topLoadDof, topLoad);
+fprintf("Floor loads: applied per floor with %s distribution to floor nodes\n", floorLoadDistribution);
 fprintf("Top node displacement (UX,UY,UZ) [m]\n");
 fprintf("UX = %.6e\n", displacements(topLoadDof));
 fprintf("UY = %.6e\n", displacements(topLoadDof+1));
@@ -169,8 +169,6 @@ loadNode = loadNode(:);
 loadCompIndex = loadCompIndex(:);
 loadValue = loadValue(:);
 loadCompName = loadCompName(:);
-loadDirection = loadCompName(loadCompIndex <= 3); % translational for arrows
-loadMoment = loadCompName(loadCompIndex >= 4);    % rotational DOFs (shown in table only)
 
 loadTable = table(loadDof,loadNode,loadCompName,loadValue, ...
     'VariableNames', {'DOF','Node','Component','AppliedLoad'});

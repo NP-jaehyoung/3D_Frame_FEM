@@ -1,4 +1,4 @@
-function [nodeCoordinates, elementNodes] = build3DFrameGeometry(numFloors, floorHeight, spanX, spanZ)
+function [nodeCoordinates, elementNodes, floorNodeIds] = build3DFrameGeometry(numFloors, floorHeight, spanX, spanZ)
 % Build regular 20-story 3D frame mesh (square plan with 4 nodes per floor).
 
 if numFloors < 1
@@ -6,13 +6,14 @@ if numFloors < 1
 end
 
 nodeCoordinates = zeros(4*numFloors,3);
-for i = 1:numFloors
-    baseY = floorHeight*(i-1);
-    nodeCoordinates(4*(i-1)+1,:) = [0      baseY 0];
-    nodeCoordinates(4*(i-1)+2,:) = [0      baseY spanZ];
-    nodeCoordinates(4*(i-1)+3,:) = [spanX  baseY spanZ];
-    nodeCoordinates(4*(i-1)+4,:) = [spanX  baseY 0];
-end
+    for i = 1:numFloors
+        baseY = floorHeight*(i-1);
+        nodeCoordinates(4*(i-1)+1,:) = [0      baseY 0];
+        nodeCoordinates(4*(i-1)+2,:) = [0      baseY spanZ];
+        nodeCoordinates(4*(i-1)+3,:) = [spanX  baseY spanZ];
+        nodeCoordinates(4*(i-1)+4,:) = [spanX  baseY 0];
+        floorNodeIds{i} = (4*(i-1)+1):(4*i);
+    end
 
 % first floor and middle floors: columns + girders
 elementNodes = zeros(8*(numFloors-1),2);

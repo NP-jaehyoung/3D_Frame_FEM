@@ -38,6 +38,7 @@ if J <= 0
 end
 G = E/(2*(1+nu));
 floorLoads = zeros(numFloors,1);            % per-floor lateral loads [kN] for static preload
+floorLoadDistribution = "AREA";             % UNIFORM or AREA
 % floorLoads = -3000 * ones(numFloors,1);   % (uncomment for distributed static lateral loads)
 
 %% time history settings
@@ -57,11 +58,11 @@ dampingRatio = 0.02;        % target damping ratio (ζ)
 zeta1 = dampingRatio;
 
 %% mesh and system matrices
-[nodeCoordinates, elementNodes] = build3DFrameGeometry(numFloors, floorHeight, spanX, spanZ);
+[nodeCoordinates, elementNodes, floorNodeIds] = build3DFrameGeometry(numFloors, floorHeight, spanX, spanZ);
 
-[stiffness, mass, force, GDof] = ...
+[stiffness, mass, force, GDof, topNode] = ...
     assemble3DFrameMatrices(numFloors, nodeCoordinates, elementNodes, ...
-    E, A, Iz, Iy, G, J, rho, 0, floorLoads, "UX");
+    E, A, Iz, Iy, G, J, rho, 0, floorLoads, "UX", floorNodeIds, floorLoadDistribution);
 stiffnessAll = stiffness;
 massAll = mass;
 forceAll = force;
@@ -139,7 +140,6 @@ velocities    = (T * vReduced')';
 accelerations = (T * aReduced')';
 
 %% response extraction
-topNode = 4*(numFloors-1) + 3;   % 1st corner node on top floor
 topUx = displacements(:,6*topNode-5);
 topUy = displacements(:,6*topNode-4);
 topUz = displacements(:,6*topNode-3);
