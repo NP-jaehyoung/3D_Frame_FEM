@@ -14,6 +14,10 @@ Performs **Static and Modal Analysis**.
     - `three_story_20_static_reactions.csv`
     - `three_story_20_static_modal.csv`
 
+> This script shares model defaults with `three_story_20_common.py`:
+> `NUM_STORIES = 20`, `FLOOR_HEIGHT = 4.0`, `SPAN_X = 4.0`, `SPAN_Z = 4.0`,
+> `POINT_LOAD_VALUE = -3000`, `FLOOR_LOAD_PRESSURE_KPA = -5`.
+
 ### 2. `three_story_20_dynamic.py`
 Performs **Dynamic Time-History Analysis**.
 - **Loads:**
@@ -27,6 +31,8 @@ Performs **Dynamic Time-History Analysis**.
     - `three_story_20_dynamic_top.csv`
     - `three_story_20_dynamic_story_drift.csv`
 
+> This script shares model defaults with `three_story_20_common.py` and `three_story_20_opensees.py`.
+
 ### 3. `visualize_structure.py`
 Generates a 3D matplotlib rendering of the structure.
 - **Output:** `structure_view_3d.png`
@@ -34,7 +40,14 @@ Generates a 3D matplotlib rendering of the structure.
 
 ![3D Structure Visualization](structure_view_3d.png)
 
-### 4. `visualize_openseespy.py`
+### 4. `three_story_20_common.py`
+Shared configuration constants and helpers used by the three scripts:
+- story/geometry defaults
+- section property computation (`section_properties`)
+- floor load generation (`floor_loads`)
+- conversion from number of stories to model levels (`level_count`)
+
+### 5. `visualize_openseespy.py`
 Uses `vfo` (Visualization for OpenSees) to generate a native interactive 3D model plot.
 - **Requires:** `vfo` library (installed).
 - **Output:** Interactive window showing the OpenSeesPy model.
@@ -65,11 +78,28 @@ This repository does not include virtual environment directories.
 Create local environment and install dependencies when cloning on a new machine:
 
 ```bash
-cd /path/to/3D_Frame_FEM
+cd /path/to/3D_Frame_FEM/openseespy
 python -m venv .usr_venv
 source .usr_venv/bin/activate   # Windows: .usr_venv\\Scripts\\activate
 python -m pip install --upgrade pip
 pip install openseespy numpy matplotlib scipy
+```
+
+### Conda environment (recommended)
+
+```bash
+cd /path/to/3D_Frame_FEM/openseespy
+conda env create -f environment.yml
+conda activate three-story-openseespy
+```
+
+### Pip requirements file
+
+```bash
+cd /path/to/3D_Frame_FEM/openseespy
+python -m venv .usr_venv
+source .usr_venv/bin/activate   # Windows: .usr_venv\\Scripts\\activate
+pip install -r requirements.txt
 ```
 
 Optional visualization package:

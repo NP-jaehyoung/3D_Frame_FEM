@@ -1,15 +1,15 @@
-"""OpenSeesPy example for 20-story 3D rigid-diaphragm frame.
+"""OpenSeesPy Static Analysis for 20-story 3D rigid-diaphragm frame.
 
-Comparable setup to ThreeDimFrame_20story.m:
 - 20 floors, 4 nodes per floor (4m x 4m square plan, 4m story height)
 - 6 DOF node (UX,UY,UZ,RX,RY,RZ)
 - Rigid diaphragm enforced per floor
-- Separate control of:
-    - point load (single node)
-    - distributed floor load (per-floor vector, distributed to floor nodes)
-- static response
-- natural frequencies
-- dynamic response by prescribed ground acceleration
+- Loads:
+    - Gravity: Distributed floor load (5 kN/m^2)
+    - Lateral: Point load at top (-3000 kN UX)
+- Output:
+    - Static Displacements
+    - Base Reactions
+    - Natural Frequencies (Modal Analysis)
 """
 
 from __future__ import annotations
@@ -21,13 +21,8 @@ from pathlib import Path
 import numpy as np
 
 from three_story_20_common import (
-    AG_CENTER_DEFAULT,
-    AG_FREQ_DEFAULT,
-    AG_WIDTH_DEFAULT,
-    AG_PEAK_G_DEFAULT,
-    DAMPING_RATIO_DEFAULT,
-    DEAD_LOAD_G_DEFAULT,
     FLOOR_HEIGHT,
+    DEAD_LOAD_G_DEFAULT,
     FLOOR_LOAD_DIR,
     FLOOR_LOAD_PRESSURE_KPA,
     INCLUDE_BASE_FLOOR_LOAD,
@@ -37,13 +32,12 @@ from three_story_20_common import (
     POINT_LOAD_VALUE,
     SPAN_X,
     SPAN_Z,
-    TIME_END_DEFAULT,
-    DT_DEFAULT,
     floor_loads,
     level_count,
     section_properties,
     top_node_id,
 )
+
 try:
     import openseespy.opensees as ops
 except ImportError as err:
@@ -78,11 +72,14 @@ def _build_geometry(num_floors: int, floor_height: float, span_x: float, span_z:
             ops.element("elasticBeamColumn", ele_id, n1, n2,
                         A, E, G, J, Iy, Iz, 1)
             ele_id += 1
-        # floor beams (closed square)
-        n1 = base + 1
-        n2 = base + 2
-        n3 = base + 3
-        n4 = base + 4
+        # floor beams (closed square) at TOP of the story
+        # This will create beams at levels 1 to num_floors-1 (i.e. Floor 1 to Roof)
+        # Base (Floor 0) will have no beams.
+        base_top = base + 4
+        n1 = base_top + 1
+        n2 = base_top + 2
+        n3 = base_top + 3
+        n4 = base_top + 4
         # (n1,n2)=Z, (n2,n3)=X, (n3,n4)=Z, (n4,n1)=X
         # Use transf 2 for Z, 1 for X
         beam_pairs = [(n1, n2, 2), (n2, n3, 1), (n3, n4, 2), (n4, n1, 1)]
@@ -130,46 +127,6 @@ def _add_nodal_loads(num_floors: int, floor_nodes, distributed_floor_loads, dist
                 ops.load(n, *vals)
 
 
-def _add_dead_load_mass(
-    num_floors: int,
-    floor_nodes,
-    floor_dead_load_kilonewton,
-    dead_load_distribution="AREA",
-    dead_load_accel=DEAD_LOAD_G_DEFAULT,
-):
-    if floor_dead_load_kilonewton is None:
-        return
-    if np.isscalar(floor_dead_load_kilonewton):
-        floor_dead_load_kilonewton = np.full(num_floors, float(floor_dead_load_kilonewton))
-    else:
-        floor_dead_load_kilonewton = np.asarray(floor_dead_load_kilonewton, dtype=float)
-    if len(floor_dead_load_kilonewton) != num_floors:
-        raise ValueError("floorDeadLoadKiloNewton must be scalar or length numFloors.")
-
-    for i_floor, floor_mass in enumerate(abs(floor_dead_load_kilonewton) / dead_load_accel):
-        nodes = floor_nodes[i_floor]
-        if not nodes:
-            continue
-        node_count = len(nodes)
-        if node_count == 0:
-            continue
-        if dead_load_distribution.upper() == "UNIFORM":
-            weight = np.ones(node_count) / node_count
-        elif dead_load_distribution.upper() == "AREA":
-            # fallback: same as uniform for rectangle geometry
-            weight = np.ones(node_count) / node_count
-        else:
-            raise ValueError("dead_load_distribution must be UNIFORM or AREA.")
-
-        for n, w in zip(nodes, weight):
-            m = floor_mass * w
-            current = ops.nodeMass(n)
-            if current is None:
-                current = [0, 0, 0, 0, 0, 0]
-            new_mass = [current[0] + m, current[1] + m, current[2] + m, 0.0, 0.0, 0.0]
-            ops.mass(n, *new_mass)
-
-
 def _dof_to_name(dof: int) -> str:
     return ["UX", "UY", "UZ", "RX", "RY", "RZ"][dof - 1]
 
@@ -177,7 +134,7 @@ def _dof_to_name(dof: int) -> str:
 def _write_static_results(out_dir: Path, top_node: int, n_floors: int, floor_nodes):
     # nodal displacement table
     num_nodes = 4 * n_floors
-    with open(out_dir / "three_story_20_opensees_static_displacements.csv", "w", newline="", encoding="utf-8") as f:
+    with open(out_dir / "three_story_20_static_displacements.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["Node", "DOF", "Component", "Displacement"])
         for n in range(1, num_nodes + 1):
@@ -185,7 +142,7 @@ def _write_static_results(out_dir: Path, top_node: int, n_floors: int, floor_nod
                 writer.writerow([n, dof, _dof_to_name(dof), ops.nodeDisp(n, dof)])
 
     # support reactions
-    with open(out_dir / "three_story_20_opensees_reactions.csv", "w", newline="", encoding="utf-8") as f:
+    with open(out_dir / "three_story_20_static_reactions.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["SupportNode", "DOF", "Component", "Reaction"])
         for n in range(1, 5):
@@ -196,55 +153,8 @@ def _write_static_results(out_dir: Path, top_node: int, n_floors: int, floor_nod
     top_disp = [ops.nodeDisp(top_node, 1), ops.nodeDisp(top_node, 2), ops.nodeDisp(top_node, 3)]
     print(f"\nTop node {top_node} displacement: UX={top_disp[0]:.6e}, UY={top_disp[1]:.6e}, UZ={top_disp[2]:.6e}")
 
-    # applied loads summary (non-zero)
-    # ops.getLoad is not available in some versions, skipping load check
-    pass
 
-
-def _run_dynamic(n_steps: int, dt: float, floor_nodes, top_node: int, out_dir: Path):
-    # record responses during dynamic
-    time = np.zeros(n_steps)
-    top_ux = np.zeros(n_steps)
-    top_uy = np.zeros(n_steps)
-    top_uz = np.zeros(n_steps)
-    floor_count = len(floor_nodes)
-
-    # helper to sample inter-story drift in UX for each floor
-    levels = floor_nodes
-    drift = np.zeros((n_steps, floor_count - 1))
-
-    for i in range(n_steps):
-        time[i] = ops.getTime()
-        top_ux[i] = ops.nodeDisp(top_node, 1)
-        top_uy[i] = ops.nodeDisp(top_node, 2)
-        top_uz[i] = ops.nodeDisp(top_node, 3)
-
-        for i_floor in range(1, floor_count):
-            top_nodes = levels[i_floor]
-            bot_nodes = levels[i_floor - 1]
-            mean_ux_top = np.mean([ops.nodeDisp(n, 1) for n in top_nodes])
-            mean_ux_bot = np.mean([ops.nodeDisp(n, 1) for n in bot_nodes])
-            drift[i, i_floor - 1] = mean_ux_top - mean_ux_bot
-
-        if i < n_steps - 1:
-            ok = ops.analyze(1, dt)
-            if ok != 0:
-                raise RuntimeError(f"Transient analysis failed at step {i}, t={ops.getTime():.3f}")
-
-    with open(out_dir / "three_story_20_opensees_dynamic_top.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Time_s", "TopUx_m", "TopUy_m", "TopUz_m"])
-        for t, ux, uy, uz in zip(time, top_ux, top_uy, top_uz):
-            writer.writerow([t, ux, uy, uz])
-
-    with open(out_dir / "three_story_20_opensees_dynamic_story_drift.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Time_s"] + [f"Story{i+1}" for i in range(floor_count - 1)])
-        for i in range(n_steps):
-            writer.writerow([time[i], *drift[i].tolist()])
-
-
-def run_example():
+def run_static_analysis():
     # -----------------------------
     # model settings
     # -----------------------------
@@ -262,7 +172,10 @@ def run_example():
     point_load_node = top_node_id(num_floors)
     point_load_value = POINT_LOAD_VALUE
     point_load_dir = POINT_LOAD_DIR
-    # floor load = pressure * area (kN). Applied in UY (negative gravity direction).
+    
+    # 5 kN/m^2 distributed load (total load per floor = pressure * area)
+    # Applied in negative Y direction (gravity)
+    # Floor 0 (Base) has NO load by default.
     distributed_floor_loads = floor_loads(
         num_floors,
         span_x=span_x,
@@ -272,21 +185,8 @@ def run_example():
     )
     distributed_floor_dir = FLOOR_LOAD_DIR
     
-    # Use the floor load to define mass for dynamic analysis
     include_dead_load_as_mass = INCLUDE_DEAD_LOAD_AS_MASS
     floor_dead_load_kilonewton = distributed_floor_loads
-
-    # dynamic setup
-    dt = DT_DEFAULT
-    time_end = TIME_END_DEFAULT
-    ag_peak = AG_PEAK_G_DEFAULT * DEAD_LOAD_G_DEFAULT
-    ag_freq = AG_FREQ_DEFAULT
-    ag_center = AG_CENTER_DEFAULT
-    ag_width = AG_WIDTH_DEFAULT
-    time_steps = np.arange(0.0, time_end + 0.5 * dt, dt)
-    ground_acc = ag_peak * np.exp(-((time_steps - ag_center) / ag_width) ** 2) * np.sin(2 * np.pi * ag_freq * time_steps)
-    n_steps = len(time_steps)
-    damping_ratio = DAMPING_RATIO_DEFAULT
 
     # -----------------------------
     # model build
@@ -297,7 +197,7 @@ def run_example():
 
     ops.wipe()
     ops.model("Basic", "-ndm", 3, "-ndf", 6)
-    # geom transformation for 3D linear elements
+    
     # geom transformation for 3D linear elements
     # 1: vecxz along global Z (for columns and X-beams)
     ops.geomTransf("Linear", 1, 0.0, 0.0, 1.0)
@@ -314,7 +214,7 @@ def run_example():
 
     _apply_rigid_diaphragms(num_floors, floor_nodes)
 
-    # Apply static loads
+    # Apply static loads (Gravity + Lateral)
     ops.timeSeries("Linear", 1)
     ops.pattern("Plain", 1, 1)
 
@@ -328,14 +228,26 @@ def run_example():
         point_load_dir,
     )
     
+    def _add_dead_load_mass(num_floors, floor_nodes, floor_dead_load_kilonewton, dead_load_accel=DEAD_LOAD_G_DEFAULT):
+        if floor_dead_load_kilonewton is None: return
+        for i_floor, floor_mass in enumerate(abs(floor_dead_load_kilonewton) / dead_load_accel):
+            nodes = floor_nodes[i_floor]
+            if not nodes: continue
+            node_count = len(nodes)
+            weight = np.ones(node_count) / node_count
+            for n, w in zip(nodes, weight):
+                # mass is scalar or vector? openseespy takes args for mass(node, m1, m2, m3, r1, r2, r3)
+                m = floor_mass * w
+                current = ops.nodeMass(n)
+                if current is None: current = [0]*6
+                # we add to translational mass (X,Y,Z)
+                # Note: rigid diaphragm handles coupling but typically we put mass on nodes
+                # floor_mass is total floor mass. each node gets share.
+                new_mass = [current[0] + m, current[1] + m, current[2] + m, 0.0, 0.0, 0.0]
+                ops.mass(n, *new_mass)
+
     if include_dead_load_as_mass:
-        _add_dead_load_mass(
-            num_floors,
-            floor_nodes,
-            floor_dead_load_kilonewton,
-            dead_load_distribution="AREA",
-            dead_load_accel=DEAD_LOAD_G_DEFAULT,
-        )
+        _add_dead_load_mass(num_floors, floor_nodes, floor_dead_load_kilonewton)
 
     # -----------------------------
     # static + modal
@@ -358,7 +270,7 @@ def run_example():
     eig = eig[eig > 1e-12]
     omegas = np.sqrt(eig)
     freqs = omegas / (2.0 * math.pi)
-    with open(out_dir / "three_story_20_opensees_modal.csv", "w", newline="", encoding="utf-8") as f:
+    with open(out_dir / "three_story_20_static_modal.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["Mode", "Frequency_Hz", "Omega_rad_s"])
         for i, (f_hz, om) in enumerate(zip(freqs, omegas), start=1):
@@ -368,43 +280,8 @@ def run_example():
     for i, f_hz in enumerate(freqs, start=1):
         print(f"Mode {i:2d}: {f_hz:.8e}")
 
-    if len(freqs) >= 2:
-        w1, w2 = freqs[0] * 2.0 * math.pi, freqs[1] * 2.0 * math.pi
-        alpha_m = 2.0 * damping_ratio * w1 * w2 / (w1 + w2)
-        beta_k = 2.0 * damping_ratio / (w1 + w2)
-    elif len(freqs) == 1:
-        w1 = freqs[0] * 2.0 * math.pi
-        alpha_m = 0.0
-        beta_k = 2.0 * damping_ratio / w1
-    else:
-        alpha_m = 0.0
-        beta_k = 0.0
-
-    ops.rayleigh(alpha_m, beta_k, 0.0, 0.0)
-
-    # -----------------------------
-    # dynamic (ground acceleration only)
-    # -----------------------------
-    ops.timeSeries("Path", 2, "-dt", dt, "-values", *ground_acc.tolist(), "-factor", 1.0)
-    ops.pattern("UniformExcitation", 2, 1, "-accel", 2)
-
-    # keep existing static loads and apply inertial excitation
-    ops.loadConst("-time", 0.0)
-
-    ops.wipeAnalysis()
-    ops.system("BandGeneral")
-    ops.numberer("RCM")
-    ops.constraints("Transformation")
-    ops.test("NormDispIncr", 1e-6, 40)
-    ops.algorithm("Newton")
-    ops.integrator("Newmark", 0.5, 0.25)
-    ops.analysis("Transient")
-    ops.setTime(0.0)
-
-    _run_dynamic(n_steps, dt, floor_nodes, point_load_node, out_dir)
-
-    print(f"\nResults written to: {out_dir}")
+    print(f"\nStatic Results written to: {out_dir}")
 
 
 if __name__ == "__main__":
-    run_example()
+    run_static_analysis()
