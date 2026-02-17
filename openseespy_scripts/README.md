@@ -109,3 +109,79 @@ pip install vfo  # only if using visualize_openseespy.py
 ```
 
 For OpenSeesPy import issues on macOS Apple Silicon, use a compatible x86_64 Python environment.
+
+
+🔧 Windows (Conda) – OpenSeesPy Tcl DLL Fix
+
+OpenSeesPy on Windows requires the Tcl runtime (tcl86t.dll).
+In some Conda environments, the DLL is installed under:
+
+<env>\Library\bin\
+
+
+but OpenSeesPy expects it in:
+
+<env>\DLLs\
+
+
+If you encounter the following error:
+
+FileNotFoundError: Could not find module '...\\DLLs\\tcl86t.dll'
+RuntimeError: Failed to import openseespy on Windows.
+
+
+follow these steps:
+
+Step 1 – Ensure tk is installed
+conda activate opspy39
+conda install tk
+
+Step 2 – Copy required DLLs
+copy %CONDA_PREFIX%\Library\bin\tcl86t.dll %CONDA_PREFIX%\DLLs\
+copy %CONDA_PREFIX%\Library\bin\tk86t.dll  %CONDA_PREFIX%\DLLs\
+
+
+Then verify:
+
+python -c "import openseespy.opensees as ops; print('ok')"
+
+Optional: Automate the Fix (Recommended)
+
+Create a PowerShell script post_setup.ps1:
+
+$envPath = $env:CONDA_PREFIX
+
+New-Item -ItemType Directory -Force -Path (Join-Path $envPath "DLLs") | Out-Null
+
+Copy-Item (Join-Path $envPath "Library\bin\tcl86t.dll") (Join-Path $envPath "DLLs\tcl86t.dll") -Force
+Copy-Item (Join-Path $envPath "Library\bin\tk86t.dll")  (Join-Path $envPath "DLLs\tk86t.dll")  -Force
+
+Write-Host "OpenSeesPy Tcl DLL fix applied."
+
+
+Run after environment creation:
+
+conda activate opspy39
+powershell -ExecutionPolicy Bypass -File .\post_setup.ps1
+
+✅ Recommended environment.yml
+name: opspy39
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.9
+  - numpy
+  - matplotlib
+  - scipy
+  - tk
+  - pip
+  - pip:
+      - openseespy
+
+📌 Recommended Python Version
+Python	Status
+3.8	Stable (no VS Code debug support)
+3.9	⭐ Recommended
+3.10+	May require additional DLL fixes

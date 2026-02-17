@@ -14,4 +14,8 @@ __pycache__/
 *.venv
 
 # Common generated outputs
+*.csv
 openseespy/results/
+MATLAB Codes for Finite Element Analysis - Solids and Structures (Ferreira).pdf
+Structural Mechanics Modelling and Analysis of Frames and Trusses (Karl-Gunnar Olsson, Ola Dahlblom).pdf
+The General Gauss Principle of Least Constraint JAM 2023.pdf

@@ -1,0 +1,14 @@
+name: opspy39
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.9
+  - numpy
+  - matplotlib
+  - scipy
+  - tk          # 🔴 중요 (tcl86t.dll 포함)
+  - pip
+  - pip:
+      - openseespy

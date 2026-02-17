@@ -7,12 +7,25 @@ to generate a 3D view.
 import sys
 from pathlib import Path
 
+import sys
+import struct
+import platform
+
+print("=== Python Environment Check ===")
+print("Version      :", sys.version)
+print("Executable   :", sys.executable)
+print("Architecture :", struct.calcsize("P") * 8, "bit")
+print("Platform     :", platform.platform())
+print("=================================")
+import openseespy.opensees as ops
+print("OpenSeesPy import OK")
+
 # Add script directory to sys.path to allow importing modules if needed,
 # though we will just copy the model building logic for standalone execution.
 script_dir = Path(__file__).resolve().parent
 sys.path.append(str(script_dir))
 
-import openseespy.opensees as ops
+#import openseespy.opensees as ops
 import vfo.vfo as vfo
 import pyvista as pv
 
