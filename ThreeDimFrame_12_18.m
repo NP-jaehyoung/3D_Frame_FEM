@@ -65,7 +65,7 @@ numberElements=size(elementNodes,1);
 % force : force vector
 % stiffness: stiffness matrix
 % GDof: global number of degrees of freedom
-GDof=3*numberNodes;
+GDof=6*numberNodes;
 U=zeros(GDof,1);
 force=zeros(GDof,1);
 stiffness=zeros(GDof);
@@ -204,7 +204,6 @@ for floor = 2:numFloors
 end
 stiff=stiffness;
 end
-
 
 
 

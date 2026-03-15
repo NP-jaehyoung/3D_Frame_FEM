@@ -1,0 +1,7 @@
+openseespy
+numpy
+matplotlib
+scipy
+
+# Optional (for OpenSees model visualization)
+vfo
