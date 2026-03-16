@@ -16,29 +16,14 @@ numFloors = 20;            % number of floor levels
 floorHeight = 4.0;         % story height [m]
 spanX = 4.0;               % x direction span [m]
 spanZ = 4.0;               % z direction span [m]
+numBaysX = 3;              % number of bays in x
+numBaysZ = 3;              % number of bays in z
 E = 2e7;                   % modulus of elasticity [kPa]
 rho = 7850;                % density
 width = 1;                 
 depth = 1;                 
-A = width*depth;           % area [m^2]
-if width <= 0 || depth <= 0
-    error("width and depth must be positive.");
-end
-Iy = width*depth^3/12;      % second moment about local y
-Iz = depth*width^3/12;      % second moment about local z
 nu = 0.167;
-if width >= depth
-    ar = depth/width;
-    J = depth * width^3 * (1/3 - 0.21*ar + 0.063*ar^5);
-else
-    ar = width/depth;
-    J = width * depth^3 * (1/3 - 0.21*ar + 0.063*ar^5);
-end
-if J <= 0
-    error("Invalid torsional constant J (non-positive). Check width/depth.");
-end
-G = E/(2*(1+nu));
-pointLoadNode = 4 * numFloors;              % concentrated load target node (default: top floor node 80)
+[A, Iy, Iz, J, G] = frameSectionProperties(width, depth, E, nu);
 pointLoadValue = -3000;                     % concentrated load magnitude [kN]
 pointLoadDirection = "UX";                  % UX/UY/UZ/RX/RY/RZ
 distributedFloorLoads = zeros(numFloors,1);  % distributed floor lateral load per level [kN]
@@ -46,7 +31,8 @@ distributedFloorLoadDirection = "UY";        % UX/UY/UZ/RX/RY/RZ
 distributedFloorLoadDistribution = "AREA";    % UNIFORM or AREA
 
 %% mesh and loads
-[nodeCoordinates, elementNodes, floorNodeIds] = build3DFrameGeometry(numFloors, floorHeight, spanX, spanZ);
+[nodeCoordinates, elementNodes, floorNodeIds, pointLoadNode] = build3DFrameGeometry( ...
+    numFloors, floorHeight, spanX, spanZ, numBaysX, numBaysZ);
 numberElements = size(elementNodes,1);
 
 %% assemble K, M
@@ -83,8 +69,9 @@ forceAll = force;
     applyRigidDiaphragmConstraints(stiffnessAll, massAll, forceAll, ...
     nodeCoordinates, 2, numFloors);
 
-%% boundary conditions: fix 1st floor nodes (nodes 1~4)
-prescribedDof = 1:24;
+%% boundary conditions: fix all base-floor nodes
+baseNodes = floorNodeIds{1}(:);
+prescribedDof = reshape((6*(baseNodes - 1) + (1:6))', 1, []);
 prescribedDofReduced = unique(dofToReduced(prescribedDof));
 
 %% static solution and output
@@ -106,9 +93,10 @@ else
     fprintf("Distributed floor loads: none\n");
 end
 fprintf("Loaded node displacement (UX,UY,UZ) [m]\n");
-fprintf("Node %d, UX = %.6e\n", pointLoadNode, displacements(targetTopLoadDof));
-fprintf("Node %d, UY = %.6e\n", pointLoadNode, displacements(targetTopLoadDof+1));
-fprintf("Node %d, UZ = %.6e\n\n", pointLoadNode, displacements(targetTopLoadDof+2));
+nodeBaseDof = 6*(pointLoadNode-1);
+fprintf("Node %d, UX = %.6e\n", pointLoadNode, displacements(nodeBaseDof + 1));
+fprintf("Node %d, UY = %.6e\n", pointLoadNode, displacements(nodeBaseDof + 2));
+fprintf("Node %d, UZ = %.6e\n\n", pointLoadNode, displacements(nodeBaseDof + 3));
 
 fprintf("Support reactions (first 24 DOF)\n");
 for ii = 1:numel(prescribedDof)
@@ -253,9 +241,6 @@ for iFloor = 1:numel(floorLevels)
     end
 end
 
-% floor polygon connectivity
-quadOrder = [1,2,3,4,1];
-
 % undeformed/deformed frame shape
 figure('Name','20-story 3D frame shape');
 hold on; grid on; axis equal; view(35,20);
@@ -317,12 +302,13 @@ title('3D frame (top load case)');
 figure('Name','20-story floor torsion');
 hold on; grid on; axis equal; view(35,25);
 for iFloor = 1:numel(floorLevels)
-    floorNodes = (4*(iFloor-1)+1):(4*iFloor);
+    floorNodes = floorNodeIds{iFloor};
     baseFloor = nodeCoordinates(floorNodes,:);
     torsFloor = floorTorsionCoords(floorNodes,:);
-    plot3(baseFloor(quadOrder,1), baseFloor(quadOrder,2), baseFloor(quadOrder,3), ...
+    hullIdx = convhull(baseFloor(:,1), baseFloor(:,3));
+    plot3(baseFloor(hullIdx,1), baseFloor(hullIdx,2), baseFloor(hullIdx,3), ...
         'k-', 'LineWidth',1.0);
-    plot3(torsFloor(quadOrder,1), torsFloor(quadOrder,2), torsFloor(quadOrder,3), ...
+    plot3(torsFloor(hullIdx,1), torsFloor(hullIdx,2), torsFloor(hullIdx,3), ...
         'm--', 'LineWidth',2.0);
     c = mean(torsFloor(:,1));
     d = mean(torsFloor(:,2));

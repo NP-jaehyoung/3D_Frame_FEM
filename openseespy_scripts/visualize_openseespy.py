@@ -28,23 +28,22 @@ sys.path.append(str(script_dir))
 #import openseespy.opensees as ops
 import vfo.vfo as vfo
 import pyvista as pv
+from three_story_20_common import E_DEFAULT, FLOOR_HEIGHT, NUM_BAYS_X, NUM_BAYS_Z, NUM_STORIES, SPAN_X, SPAN_Z, level_count, section_properties
 
 def build_model_for_vis():
     # -----------------------------
     # model settings (Same as three_story_20_static.py)
     # -----------------------------
-    num_floors = 21 # 21 Levels (0 to 20)
-    floor_height = 4.0
-    span_x = 4.0
-    span_z = 4.0
+    num_floors = level_count(NUM_STORIES)
+    floor_height = FLOOR_HEIGHT
+    span_x = SPAN_X
+    span_z = SPAN_Z
+    num_bays_x = NUM_BAYS_X
+    num_bays_z = NUM_BAYS_Z
 
     # material + section
-    E = 2.0e7
-    G = E / (2.0 * (1.0 + 0.167))
-    J = 1.0 # arbitrary non-zero
-    A = 1.0
-    Iy = 1.0
-    Iz = 1.0
+    E = E_DEFAULT
+    A, G, J, Iy, Iz = section_properties(E=E)
 
     ops.wipe()
     ops.model("Basic", "-ndm", 3, "-ndf", 6)
@@ -61,35 +60,41 @@ def build_model_for_vis():
     for i_floor in range(num_floors):
         y = floor_height * i_floor
         floor = []
-        for x, z in ((0.0, 0.0), (0.0, span_z), (span_x, span_z), (span_x, 0.0)):
-            ops.node(node_id, x, y, z)
-            floor.append(node_id)
-            node_id += 1
+        for iz in range(num_bays_z + 1):
+            for ix in range(num_bays_x + 1):
+                x = ix * span_x
+                z = iz * span_z
+                ops.node(node_id, x, y, z)
+                floor.append(node_id)
+                node_id += 1
         floor_nodes.append(floor)
 
     ele_id = 1
     for i_floor in range(num_floors - 1):
-        base = 4 * i_floor
-        # columns
-        for a in range(4):
-            n1 = base + a + 1
-            n2 = n1 + 4
-            ops.element("elasticBeamColumn", ele_id, n1, n2,
-                        A, E, G, J, Iy, Iz, 1)
+        floor_bottom = floor_nodes[i_floor]
+        floor_top = floor_nodes[i_floor + 1]
+
+        for local_idx, n1 in enumerate(floor_bottom):
+            n2 = floor_top[local_idx]
+            ops.element("elasticBeamColumn", ele_id, n1, n2, A, E, G, J, Iy, Iz, 1)
             ele_id += 1
-        
-        # floor beams at TOP of the story (using corrected indices)
-        base_top = base + 4
-        n1 = base_top + 1
-        n2 = base_top + 2
-        n3 = base_top + 3
-        n4 = base_top + 4
-        
-        beam_pairs = [(n1, n2, 2), (n2, n3, 1), (n3, n4, 2), (n4, n1, 1)]
-        for (i, j, transf) in beam_pairs:
-            ops.element("elasticBeamColumn", ele_id, i, j,
-                        A, E, G, J, Iy, Iz, transf)
-            ele_id += 1
+
+        for iz in range(num_bays_z + 1):
+            row = iz * (num_bays_x + 1)
+            for ix in range(num_bays_x):
+                n1 = floor_top[row + ix]
+                n2 = floor_top[row + ix + 1]
+                ops.element("elasticBeamColumn", ele_id, n1, n2, A, E, G, J, Iy, Iz, 1)
+                ele_id += 1
+
+        for iz in range(num_bays_z):
+            row = iz * (num_bays_x + 1)
+            next_row = (iz + 1) * (num_bays_x + 1)
+            for ix in range(num_bays_x + 1):
+                n1 = floor_top[row + ix]
+                n2 = floor_top[next_row + ix]
+                ops.element("elasticBeamColumn", ele_id, n1, n2, A, E, G, J, Iy, Iz, 2)
+                ele_id += 1
             
     # base support
     for n in floor_nodes[0]:

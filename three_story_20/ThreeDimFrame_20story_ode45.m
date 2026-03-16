@@ -15,28 +15,14 @@ numFloors = 20;            % number of floor levels
 floorHeight = 4.0;         % story height [m]
 spanX = 4.0;               % x direction span [m]
 spanZ = 4.0;               % z direction span [m]
+numBaysX = 3;              % number of bays in x
+numBaysZ = 3;              % number of bays in z
 E = 2e7;                   % modulus of elasticity [kPa]
 rho = 7850;                % density
 width = 1;                 
 depth = 1;                 
-A = width*depth;           % area [m^2]
-if width <= 0 || depth <= 0
-    error("width and depth must be positive.");
-end
-Iy = width*depth^3/12;      % second moment about local y
-Iz = depth*width^3/12;      % second moment about local z
 nu = 0.167;
-if width >= depth
-    ar = depth/width;
-    J = depth * width^3 * (1/3 - 0.21*ar + 0.063*ar^5);
-else
-    ar = width/depth;
-    J = width * depth^3 * (1/3 - 0.21*ar + 0.063*ar^5);
-end
-if J <= 0
-    error("Invalid torsional constant J (non-positive). Check width/depth.");
-end
-G = E/(2*(1+nu));
+[A, Iy, Iz, J, G] = frameSectionProperties(width, depth, E, nu);
 floorLoads = zeros(numFloors,1);            % per-floor lateral loads [kN] for static preload
 floorLoadDistribution = "AREA";             % UNIFORM or AREA
 % floorLoads = -3000 * ones(numFloors,1);   % (uncomment for distributed static lateral loads)
@@ -63,7 +49,8 @@ dampingRatio = 0.02;        % target damping ratio (ζ)
 zeta1 = dampingRatio;
 
 %% mesh and system matrices
-[nodeCoordinates, elementNodes, floorNodeIds] = build3DFrameGeometry(numFloors, floorHeight, spanX, spanZ);
+[nodeCoordinates, elementNodes, floorNodeIds] = build3DFrameGeometry( ...
+    numFloors, floorHeight, spanX, spanZ, numBaysX, numBaysZ);
 
 [stiffness, mass, force, GDof, topNode] = ...
     assemble3DFrameMatrices(numFloors, nodeCoordinates, elementNodes, ...
@@ -85,13 +72,14 @@ if includeDeadLoadAsMass
         totalDeadMass, deadLoadDistribution);
 end
 
-%% rigid diaphragm constraints: tie all nodes by floor in UX, UZ, RY (dx, dz, ry)
+%% rigid diaphragm constraints: tie each floor as a rigid body about its centroid
 [stiffness, mass, force, T, dofToReduced] = ...
     applyRigidDiaphragmConstraints(stiffnessAll, massAll, forceAll, ...
     nodeCoordinates, 2, numFloors);
 
-%% fixed support: nodes 1~4 on first floor
-prescribedDof = 1:24;
+%% fixed support: all base-floor nodes
+baseNodes = floorNodeIds{1}(:);
+prescribedDof = reshape((6*(baseNodes - 1) + (1:6))', 1, []);
 prescribedDofReduced = unique(dofToReduced(prescribedDof));
 activeDof = setdiff((1:size(stiffness,1))', prescribedDofReduced);
 

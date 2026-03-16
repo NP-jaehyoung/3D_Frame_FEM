@@ -1,187 +1,128 @@
 # 20-Story 3D Frame OpenSeesPy Analysis
 
-This project performs a structural analysis of a 20-story 3D moment-resisting frame using [OpenSeesPy](https://openseespydoc.readthedocs.io/en/latest/).
+This folder contains an OpenSeesPy version of the 20-story 3D moment-resisting frame example in this repository.
+The current default model uses a `3 x 3` bay plan.
+
+For a Korean version of this document, see `readmekr.md`.
 
 ## Scripts
 
-### 1. `three_story_20_static.py`
-Performs **Static and Modal Analysis**.
-- **Loads:**
-    - Gravity: Distributed floor load (-5 kN/m²).
-    - Lateral: Point load at top floor (-3000 kN, UX).
-- **Outputs:**
-    - `three_story_20_static_displacements.csv`
-    - `three_story_20_static_reactions.csv`
-    - `three_story_20_static_modal.csv`
+### `three_story_20_static.py`
+Performs static and modal analysis.
 
-> This script shares model defaults with `three_story_20_common.py`:
-> `NUM_STORIES = 20`, `FLOOR_HEIGHT = 4.0`, `SPAN_X = 4.0`, `SPAN_Z = 4.0`,
-> `POINT_LOAD_VALUE = -3000`, `FLOOR_LOAD_PRESSURE_KPA = -5`.
+- Loads:
+  - Gravity: distributed floor load `-5 kN/m^2`
+  - Lateral: top point load `-3000 kN` in `UX`
+- Outputs:
+  - `results/three_story_20_static_displacements.csv`
+  - `results/three_story_20_static_reactions.csv`
+  - `results/three_story_20_static_modal.csv`
 
-### 2. `three_story_20_dynamic.py`
-Performs **Dynamic Time-History Analysis**.
-- **Loads:**
-    - Gravity: Distributed floor load (-5 kN/m²).
-    - **No Lateral Point Load**.
-    - Ground Motion: Uniform Excitation (0.3g sine pulse).
-- **Process:**
-    1. Apply Gravity Loads -> Analyze -> Fix Loads (`loadConst`).
-    2. Apply Ground Motion -> Analyze (Transient).
-- **Outputs:**
-    - `three_story_20_dynamic_top.csv`
-    - `three_story_20_dynamic_story_drift.csv`
+### `three_story_20_dynamic.py`
+Performs dynamic time-history analysis.
 
-> This script shares model defaults with `three_story_20_common.py` and `three_story_20_opensees.py`.
+- Loads:
+  - Gravity: distributed floor load `-5 kN/m^2`
+  - No lateral point load
+  - Ground motion: `0.3g` sine pulse
+- Outputs:
+  - `results/three_story_20_dynamic_top.csv`
+  - `results/three_story_20_dynamic_story_drift.csv`
 
-### 3. `visualize_structure.py`
-Generates a 3D matplotlib rendering of the structure.
-- **Output:** `structure_view_3d.png`
-- **Visualization:** Black frame, Green semi-transparent slabs, Red supports, Blue lateral load arrow.
+### `three_story_20_opensees.py`
+Shared OpenSeesPy model builder used by the analysis scripts.
 
-![3D Structure Visualization](structure_view_3d.png)
+### `three_story_20_common.py`
+Shared configuration constants and helpers:
 
-### 4. `three_story_20_common.py`
-Shared configuration constants and helpers used by the three scripts:
-- story/geometry defaults
-- section property computation (`section_properties`)
-- floor load generation (`floor_loads`)
-- conversion from number of stories to model levels (`level_count`)
+- story and geometry defaults
+- section property computation
+- floor-load generation
+- conversion from story count to modeled level count
 
-### 5. `visualize_openseespy.py`
-Uses `vfo` (Visualization for OpenSees) to generate a native interactive 3D model plot.
-- **Requires:** `vfo` library (installed).
-- **Output:** Interactive window showing the OpenSeesPy model.
+### `visualize_structure.py`
+Generates a matplotlib 3D rendering of the structure and saves `structure_view_3d.png`.
 
-## Model Description
+### `visualize_openseespy.py`
+Uses `vfo` to show the OpenSeesPy model in an interactive viewer.
 
-- **Geometry:** 20 Stories (21 Levels), 4m height/story, 4m x 4m plan.
-- **Section:** 1.0m x 1.0m Square Column/Beam.
-- **Material:** E=2.0e7 kPa, nu=0.167.
+## Model Notes
+
+- Geometry: `NUM_STORIES = 20`, which produces `21` modeled levels including the base.
+- Bay layout: `NUM_BAYS_X = 3`, `NUM_BAYS_Z = 3`
+- Story height: `4.0 m`
+- Bay spacing: `4.0 m x 4.0 m`
+- Total plan size: `12.0 m x 12.0 m`
+- Section: `1.0 m x 1.0 m` square member
+- Material: `E = 2.0e7 kPa`, `nu = 0.167`
+
+This differs from the MATLAB `three_story_20` scripts, where `numFloors` is used as the number of modeled floor levels directly.
+Bay counts can be changed in `three_story_20_common.py`.
 
 ## Usage
 
-Run the desired analysis script using Python:
-
 ```bash
-# Static Analysis
+# Static analysis
 python three_story_20_static.py
 
-# Dynamic Analysis
+# Dynamic analysis
 python three_story_20_dynamic.py
 ```
 
-*Note:* Use an x86_64 environment on macOS Apple Silicon if `openseespy` fails to import.
+## Environment Setup
 
-## Environment setup
-
-This repository does not include virtual environment directories.  
-Create local environment and install dependencies when cloning on a new machine:
+Create the environment from this folder:
 
 ```bash
-cd /path/to/3D_Frame_FEM/openseespy
+cd /path/to/3D_Frame_FEM/openseespy_scripts
 python -m venv .usr_venv
 source .usr_venv/bin/activate   # Windows: .usr_venv\\Scripts\\activate
 python -m pip install --upgrade pip
-pip install openseespy numpy matplotlib scipy
+pip install -r requirements.txt
 ```
 
-### Conda environment (recommended)
+### Conda environment
 
 ```bash
-cd /path/to/3D_Frame_FEM/openseespy
+cd /path/to/3D_Frame_FEM/openseespy_scripts
 conda env create -f environment.yml
 conda activate three-story-openseespy
 ```
 
-### Pip requirements file
+Optional:
 
 ```bash
-cd /path/to/3D_Frame_FEM/openseespy
-python -m venv .usr_venv
-source .usr_venv/bin/activate   # Windows: .usr_venv\\Scripts\\activate
-pip install -r requirements.txt
+pip install vfo
 ```
 
-Optional visualization package:
+## Windows (Conda): Tcl DLL Fix
 
-```bash
-pip install vfo  # only if using visualize_openseespy.py
+OpenSeesPy on Windows may require `tcl86t.dll` and `tk86t.dll` under:
+
+```text
+<env>\\DLLs\\
 ```
 
-For OpenSeesPy import issues on macOS Apple Silicon, use a compatible x86_64 Python environment.
+If they only exist under:
 
+```text
+<env>\\Library\\bin\\
+```
 
-🔧 Windows (Conda) – OpenSeesPy Tcl DLL Fix
+copy them after creating the environment:
 
-OpenSeesPy on Windows requires the Tcl runtime (tcl86t.dll).
-In some Conda environments, the DLL is installed under:
-
-<env>\Library\bin\
-
-
-but OpenSeesPy expects it in:
-
-<env>\DLLs\
-
-
-If you encounter the following error:
-
-FileNotFoundError: Could not find module '...\\DLLs\\tcl86t.dll'
-RuntimeError: Failed to import openseespy on Windows.
-
-
-follow these steps:
-
-Step 1 – Ensure tk is installed
+```powershell
 conda activate opspy39
 conda install tk
-
-Step 2 – Copy required DLLs
-copy %CONDA_PREFIX%\Library\bin\tcl86t.dll %CONDA_PREFIX%\DLLs\
-copy %CONDA_PREFIX%\Library\bin\tk86t.dll  %CONDA_PREFIX%\DLLs\
-
-
-Then verify:
-
+copy $env:CONDA_PREFIX\\Library\\bin\\tcl86t.dll $env:CONDA_PREFIX\\DLLs\\
+copy $env:CONDA_PREFIX\\Library\\bin\\tk86t.dll  $env:CONDA_PREFIX\\DLLs\\
 python -c "import openseespy.opensees as ops; print('ok')"
+```
 
-Optional: Automate the Fix (Recommended)
+The included `post_setup.ps1` automates that copy step.
 
-Create a PowerShell script post_setup.ps1:
+## Recommended Python Version
 
-$envPath = $env:CONDA_PREFIX
-
-New-Item -ItemType Directory -Force -Path (Join-Path $envPath "DLLs") | Out-Null
-
-Copy-Item (Join-Path $envPath "Library\bin\tcl86t.dll") (Join-Path $envPath "DLLs\tcl86t.dll") -Force
-Copy-Item (Join-Path $envPath "Library\bin\tk86t.dll")  (Join-Path $envPath "DLLs\tk86t.dll")  -Force
-
-Write-Host "OpenSeesPy Tcl DLL fix applied."
-
-
-Run after environment creation:
-
-conda activate opspy39
-powershell -ExecutionPolicy Bypass -File .\post_setup.ps1
-
-✅ Recommended environment.yml
-name: opspy39
-channels:
-  - conda-forge
-  - defaults
-
-dependencies:
-  - python=3.9
-  - numpy
-  - matplotlib
-  - scipy
-  - tk
-  - pip
-  - pip:
-      - openseespy
-
-📌 Recommended Python Version
-Python	Status
-3.8	Stable (no VS Code debug support)
-3.9	⭐ Recommended
-3.10+	May require additional DLL fixes
+- `3.9`: recommended
+- `3.8`: generally stable
+- `3.10+`: may need extra DLL fixes on Windows
