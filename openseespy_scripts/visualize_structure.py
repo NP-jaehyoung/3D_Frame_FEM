@@ -1,4 +1,4 @@
-"""Visualize the 20-story 3D frame structure.
+"""Visualize the 20-story multi-bay 3D frame structure.
 
 This script generates a 3D plot of the structure:
 - Frame (Columns/Beams): Black lines
@@ -6,11 +6,20 @@ This script generates a 3D plot of the structure:
 - Supports: Marked at the base
 """
 
+import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-import numpy as np
 
-def visualize_structure(num_floors=21, floor_height=4.0, span_x=4.0, span_z=4.0):
+from three_story_20_common import FLOOR_HEIGHT, NUM_BAYS_X, NUM_BAYS_Z, SPAN_X, SPAN_Z
+
+def visualize_structure(
+    num_floors=21,
+    floor_height=FLOOR_HEIGHT,
+    span_x=SPAN_X,
+    span_z=SPAN_Z,
+    num_bays_x=NUM_BAYS_X,
+    num_bays_z=NUM_BAYS_Z,
+):
     fig = plt.figure(figsize=(10, 15))
     ax = fig.add_subplot(111, projection='3d')
     
@@ -22,14 +31,14 @@ def visualize_structure(num_floors=21, floor_height=4.0, span_x=4.0, span_z=4.0)
     lines = []
     
     # 1. Draw Columns (Vertical Lines)
-    # 4 corners: (0,0), (0,span_z), (span_x,span_z), (span_x,0)
-    corners = [(0, 0), (0, span_z), (span_x, span_z), (span_x, 0)]
-    
-    for x, z in corners:
-        # Plot column from y=0 to y=total_height
-        # Map: Struct(x, y, z) -> Plot(x, z, y_vertical)
-        # Struct Y is Height -> Plot Z
-        ax.plot([x, x], [z, z], [0, total_height], color='black', linewidth=1.5)
+    width_x = num_bays_x * span_x
+    width_z = num_bays_z * span_z
+
+    for iz in range(num_bays_z + 1):
+        for ix in range(num_bays_x + 1):
+            x = ix * span_x
+            z = iz * span_z
+            ax.plot([x, x], [z, z], [0, total_height], color='black', linewidth=1.0)
         
     # 2. Draw Floors (Beams + Slabs)
     for i in range(num_floors):
@@ -40,9 +49,9 @@ def visualize_structure(num_floors=21, floor_height=4.0, span_x=4.0, span_z=4.0)
         # Verts in structure coords: (x, z, y_level)
         verts = [
             (0, 0, y),
-            (0, span_z, y),
-            (span_x, span_z, y),
-            (span_x, 0, y)
+            (0, width_z, y),
+            (width_x, width_z, y),
+            (width_x, 0, y)
         ]
         
         # Draw beams (Black lines)
@@ -53,6 +62,13 @@ def visualize_structure(num_floors=21, floor_height=4.0, span_x=4.0, span_z=4.0)
         ys = [v[2] for v in verts] + [verts[0][2]] # Struct Y -> Plot Z
         
         ax.plot(xs, zs, ys, color='black', linewidth=1.0)
+
+        for iz in range(num_bays_z + 1):
+            z = iz * span_z
+            ax.plot([0, width_x], [z, z], [y, y], color='black', linewidth=0.8)
+        for ix in range(num_bays_x + 1):
+            x = ix * span_x
+            ax.plot([x, x], [0, width_z], [y, y], color='black', linewidth=0.8)
         
         # Draw Slab (Green Surface)
         # Poly3DCollection expects list of (x, y, z) tuples for vertices
@@ -65,8 +81,13 @@ def visualize_structure(num_floors=21, floor_height=4.0, span_x=4.0, span_z=4.0)
     # 3. Base Supports
     # Plot points at y=0 (Plot Z=0)
     # Scatter(x, y, z) -> (Struct X, Struct Z, 0)
-    ax.scatter([0, 0, span_x, span_x], [0, span_z, span_z, 0], [0, 0, 0, 0], 
-               color='red', s=50, marker='^', label='Fixed Support')
+    support_x = []
+    support_z = []
+    for iz in range(num_bays_z + 1):
+        for ix in range(num_bays_x + 1):
+            support_x.append(ix * span_x)
+            support_z.append(iz * span_z)
+    ax.scatter(support_x, support_z, [0] * len(support_x), color='red', s=30, marker='^', label='Fixed Support')
 
     # 4. Top Point Load (Arrow)
     # Load is applied at (span_x, 0, total_height) in Struct coords.
@@ -76,12 +97,12 @@ def visualize_structure(num_floors=21, floor_height=4.0, span_x=4.0, span_z=4.0)
     # Direction vector: (-5, 0, 0) -> Plot(-5, 0, 0)
     
     # Text label position
-    ax.text(span_x + 6, 0, total_height, 'Lateral Load (-UX)', color='blue')
+    ax.text(width_x + 6, 0, total_height, 'Lateral Load (-UX)', color='blue')
     
     # Quiver(x, y, z, u, v, w)
     # Position: (span_x + 5, 0, total_height) (Tail)
     # Vector: (-5, 0, 0)
-    ax.quiver(span_x + 5, 0, total_height, -5, 0, 0, color='blue', length=5, arrow_length_ratio=0.3)
+    ax.quiver(width_x + 5, 0, total_height, -5, 0, 0, color='blue', length=5, arrow_length_ratio=0.3)
 
     # Settings
     ax.set_xlabel('X (Span X)')
@@ -90,9 +111,9 @@ def visualize_structure(num_floors=21, floor_height=4.0, span_x=4.0, span_z=4.0)
     ax.set_title(f'3D Model of {num_floors}-Story Frame')
     
     # Set limits
-    max_range = np.array([span_x + 5, span_z, total_height]).max()
-    mid_x = (span_x + 5) * 0.5
-    mid_y = span_z * 0.5
+    max_range = np.array([width_x + 5, width_z, total_height]).max()
+    mid_x = (width_x + 5) * 0.5
+    mid_y = width_z * 0.5
     mid_z = total_height * 0.5
     
     ax.set_xlim(mid_x - max_range*0.5, mid_x + max_range*0.5)

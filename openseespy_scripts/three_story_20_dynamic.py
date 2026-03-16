@@ -1,6 +1,6 @@
-"""OpenSeesPy Dynamic Analysis for 20-story 3D rigid-diaphragm frame.
+"""OpenSeesPy Dynamic Analysis for 20-story multi-bay 3D rigid-diaphragm frame.
 
-- 20 floors, 4 nodes per floor (4m x 4m square plan, 4m story height)
+- 20 stories with configurable bay counts in X/Z
 - 6 DOF node (UX,UY,UZ,RX,RY,RZ)
 - Rigid diaphragm enforced per floor
 - Loads:
@@ -28,17 +28,21 @@ from three_story_20_common import (
     DEAD_LOAD_G_DEFAULT,
     DAMPING_RATIO_DEFAULT,
     DT_DEFAULT,
+    E_DEFAULT,
     FLOOR_HEIGHT,
     FLOOR_LOAD_DIR,
     FLOOR_LOAD_PRESSURE_KPA,
     INCLUDE_BASE_FLOOR_LOAD,
     INCLUDE_DEAD_LOAD_AS_MASS,
+    NUM_BAYS_X,
+    NUM_BAYS_Z,
     NUM_STORIES,
     SPAN_X,
     SPAN_Z,
     TIME_END_DEFAULT,
     floor_loads,
     level_count,
+    nodes_per_level,
     section_properties,
     top_node_id,
 )
@@ -51,8 +55,21 @@ except ImportError as err:
     ) from err
 
 
-def _build_geometry(num_floors: int, floor_height: float, span_x: float, span_z: float):
-    """Build square 4-node floor mesh and element connectivity."""
+def _build_geometry(
+    num_floors: int,
+    floor_height: float,
+    span_x: float,
+    span_z: float,
+    E: float,
+    A: float,
+    G: float,
+    J: float,
+    Iy: float,
+    Iz: float,
+    num_bays_x: int,
+    num_bays_z: int,
+):
+    """Build multi-bay floor mesh and frame connectivity."""
     node_id = 1
     node_xy = []
     floor_nodes = []
@@ -60,36 +77,42 @@ def _build_geometry(num_floors: int, floor_height: float, span_x: float, span_z:
     for i_floor in range(num_floors):
         y = floor_height * i_floor
         floor = []
-        for x, z in ((0.0, 0.0), (0.0, span_z), (span_x, span_z), (span_x, 0.0)):
-            ops.node(node_id, x, y, z)
-            floor.append(node_id)
-            node_xy.append((node_id, x, y, z))
-            node_id += 1
+        for iz in range(num_bays_z + 1):
+            for ix in range(num_bays_x + 1):
+                x = ix * span_x
+                z = iz * span_z
+                ops.node(node_id, x, y, z)
+                floor.append(node_id)
+                node_xy.append((node_id, x, y, z))
+                node_id += 1
         floor_nodes.append(floor)
 
     ele_id = 1
     for i_floor in range(num_floors - 1):
-        base = 4 * i_floor
-        # columns
-        for a in range(4):
-            n1 = base + a + 1
-            n2 = n1 + 4
-            ops.element("elasticBeamColumn", ele_id, n1, n2,
-                        A, E, G, J, Iy, Iz, 1)
+        floor_bottom = floor_nodes[i_floor]
+        floor_top = floor_nodes[i_floor + 1]
+
+        for local_idx, n1 in enumerate(floor_bottom):
+            n2 = floor_top[local_idx]
+            ops.element("elasticBeamColumn", ele_id, n1, n2, A, E, G, J, Iy, Iz, 1)
             ele_id += 1
-        # floor beams (closed square) at TOP of the story
-        base_top = base + 4
-        n1 = base_top + 1
-        n2 = base_top + 2
-        n3 = base_top + 3
-        n4 = base_top + 4
-        # (n1,n2)=Z, (n2,n3)=X, (n3,n4)=Z, (n4,n1)=X
-        # Use transf 2 for Z, 1 for X
-        beam_pairs = [(n1, n2, 2), (n2, n3, 1), (n3, n4, 2), (n4, n1, 1)]
-        for (i, j, transf) in beam_pairs:
-            ops.element("elasticBeamColumn", ele_id, i, j,
-                        A, E, G, J, Iy, Iz, transf)
-            ele_id += 1
+
+        for iz in range(num_bays_z + 1):
+            row = iz * (num_bays_x + 1)
+            for ix in range(num_bays_x):
+                n1 = floor_top[row + ix]
+                n2 = floor_top[row + ix + 1]
+                ops.element("elasticBeamColumn", ele_id, n1, n2, A, E, G, J, Iy, Iz, 1)
+                ele_id += 1
+
+        for iz in range(num_bays_z):
+            row = iz * (num_bays_x + 1)
+            next_row = (iz + 1) * (num_bays_x + 1)
+            for ix in range(num_bays_x + 1):
+                n1 = floor_top[row + ix]
+                n2 = floor_top[next_row + ix]
+                ops.element("elasticBeamColumn", ele_id, n1, n2, A, E, G, J, Iy, Iz, 2)
+                ele_id += 1
 
     return node_xy, floor_nodes
 
@@ -182,13 +205,15 @@ def run_dynamic_analysis():
     floor_height = FLOOR_HEIGHT
     span_x = SPAN_X
     span_z = SPAN_Z
+    num_bays_x = NUM_BAYS_X
+    num_bays_z = NUM_BAYS_Z
 
     # material + section
-    global E, G, J, A, Iy, Iz
-    A, G, J, Iy, Iz = section_properties()
+    E = E_DEFAULT
+    A, G, J, Iy, Iz = section_properties(E=E)
 
     # loads
-    point_load_node = top_node_id(num_floors)
+    point_load_node = top_node_id(num_floors, num_bays_x, num_bays_z)
     
     # 5 kN/m^2 distributed load (total load per floor = pressure * area)
     # Applied in negative Y direction (gravity)
@@ -196,6 +221,8 @@ def run_dynamic_analysis():
         num_floors,
         span_x=span_x,
         span_z=span_z,
+        num_bays_x=num_bays_x,
+        num_bays_z=num_bays_z,
         pressure_kpa=FLOOR_LOAD_PRESSURE_KPA,
         include_base=INCLUDE_BASE_FLOOR_LOAD,
     )
@@ -230,7 +257,11 @@ def run_dynamic_analysis():
     ops.geomTransf("Linear", 1, 0.0, 0.0, 1.0)
     ops.geomTransf("Linear", 2, 1.0, 0.0, 0.0)
 
-    nodes, floor_nodes = _build_geometry(num_floors, floor_height, span_x, span_z)
+    nodes, floor_nodes = _build_geometry(
+        num_floors, floor_height, span_x, span_z, E, A, G, J, Iy, Iz, num_bays_x, num_bays_z
+    )
+    if len(nodes) != nodes_per_level(num_bays_x, num_bays_z) * num_floors:
+        raise RuntimeError("Node count mismatch.")
     
     # base support
     for n in floor_nodes[0]:

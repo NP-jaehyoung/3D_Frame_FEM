@@ -41,11 +41,11 @@ if startFloor > 1
 end
 
 % Floors from startFloor: rigid diaphragm in x-z plane + vertical offset handling
-% Linearized rigid-body relation at node i (relative to floor centroid c)
-% sign convention chosen to match user's in-plane formula:
-% ux_i = ucx - (z-zc)*Ry + (y-yc)*Rz
-% uy_i = ucy - (x-xc)*Rz + (z-zc)*Rx
-% uz_i = ucz - (y-yc)*Rx + (x-xc)*Ry
+% Linearized rigid-body relation at node i (relative to floor centroid c):
+% u_i = u_c + theta x r_i
+% ux_i = ucx + (z-zc)*Ry - (y-yc)*Rz
+% uy_i = ucy + (x-xc)*Rz - (z-zc)*Rx
+% uz_i = ucz + (y-yc)*Rx - (x-xc)*Ry
 for iFloor = startFloor:numFloors
     floorNodes = find(abs(nodeCoordinates(:,2)-levels(iFloor)) < 1e-9);
     if isempty(floorNodes)
@@ -76,17 +76,17 @@ for iFloor = startFloor:numFloors
         dofRy = dofUx + 4;
         dofRz = dofUx + 5;
 
-        % ux_i = ucx - dz*Ry + dy*Rz
+        % ux_i = ucx + dz*Ry - dy*Rz
         rows(end+1,1) = dofUx; cols(end+1,1) = colUx; vals(end+1,1) = 1.0;
-        rows(end+1,1) = dofUx; cols(end+1,1) = colRy; vals(end+1,1) = -dz;
-        rows(end+1,1) = dofUx; cols(end+1,1) = colRz; vals(end+1,1) =  dy;
+        rows(end+1,1) = dofUx; cols(end+1,1) = colRy; vals(end+1,1) =  dz;
+        rows(end+1,1) = dofUx; cols(end+1,1) = colRz; vals(end+1,1) = -dy;
 
-        % uy_i = ucy + dz*Rx - dx*Rz
+        % uy_i = ucy + dx*Rz - dz*Rx
         rows(end+1,1) = dofUy; cols(end+1,1) = colUy; vals(end+1,1) = 1.0;
         rows(end+1,1) = dofUy; cols(end+1,1) = colRz; vals(end+1,1) =  dx;
         rows(end+1,1) = dofUy; cols(end+1,1) = colRx; vals(end+1,1) = -dz;
 
-        % uz_i = ucz - dy*Rx + dx*Ry
+        % uz_i = ucz + dy*Rx - dx*Ry
         rows(end+1,1) = dofUz; cols(end+1,1) = colUz; vals(end+1,1) = 1.0;
         rows(end+1,1) = dofUz; cols(end+1,1) = colRx; vals(end+1,1) =  dy;
         rows(end+1,1) = dofUz; cols(end+1,1) = colRy; vals(end+1,1) = -dx;

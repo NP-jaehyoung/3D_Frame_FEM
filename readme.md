@@ -1,103 +1,125 @@
-# 3D_Frame_FEM 저장소 요약 (2026-02-15 기준)
+# 3D_Frame_FEM 저장소 요약
 
 ## 프로젝트 개요
-MATLAB 기반 2D/3D 구조물 FEM(유한요소법) 예제 및 문제 풀이 모음입니다.  
-3차원 프레임(보-기둥-거더) 모델링, 조립, 경계조건 적용, 하중해석, 고유진동 해석을 다룹니다.
 
-최근 `three_story_20/ThreeDimFrame_20story.m`와 `three_story_20/ThreeDimFrame_20story_ode45.m`를 중심으로 구조화되어 있으며, 20층 고층 모델에서 강체 바닥(디아프램), 층별 분포하중, 동적응답(ODE45) 예제를 함께 제공합니다.
+이 저장소는 MATLAB 기반의 2D/3D 구조해석 FEM 예제와, 이를 OpenSeesPy로 확장한 3차원 프레임 해석 실험을 함께 담고 있습니다.
 
-## 폴더/주요 파일
+현재 작업의 중심은 `three_story_20/` 및 `openseespy_scripts/` 폴더에 있는 20층 3D 프레임 모델이며, 다음 내용을 다룹니다.
+
+- 3차원 프레임 강성/질량 행렬 조립
+- 강체 바닥(rigid diaphragm) 제약
+- 정적 해석
+- 고유진동수 해석
+- 지반가속도 입력 기반 동적 응답
+- OpenSeesPy 기반 비교 모델
+
+## 폴더 구성
 
 ### 루트
-- `ThreeDimFrame.m` : 기본 3D 프레임(샘플) 해석
-- `ThreeDimFrame_2.m` : 소규모 3D 프레임 예제
-- `ThreeDimFrame_12_18.m` : 12~18층 계열 변형 예제
-- `drawingMesh.m`, `loading.m` : 메쉬/하중 관련 보조 함수
-- `readme.md` : 기존 짧은 기본 안내
-- `.gitignore` : `.DS_Store` 등 불필요 파일 제외
+
+- `ThreeDimFrame.m`: 기본 3D 프레임 샘플
+- `ThreeDimFrame_2.m`: 소규모 3D 프레임 예제
+- `ThreeDimFrame_12_18.m`: 중간 단계 실험 스크립트
+- `drawingMesh.m`, `loading.m`: 시각화 및 하중 보조 함수
+- `readme.md`: 저장소 개요 문서
 
 ### `three_story_20/`
-- `ThreeDimFrame_20story.m` : 20층 3D 프레임 정적 해석(변위/반력/고유진동수)
-- `ThreeDimFrame_20story_ode45.m` : 지반 가속도 입력 기반 ODE45 동적응답 예제
-- `utils/` : 20층 예제에서 사용하는 공통 유틸리티 함수
-  - `build3DFrameGeometry.m`
-  - `assemble3DFrameMatrices.m`
-    - `floorLoads`(층별 하중 벡터)와 `floorLoadDof`(예: `"UX"`, `"UY"`, `"RZ"`)를 지원합니다.
-    - 층별 노드 집합을 `floorNodeIds`로 받아 `UNIFORM` 또는 `AREA`(기하 기반) 분배를 지원합니다.
-    - `topLoad`(기존 상부 집중하중) + 층별 하중 동시 조합이 가능합니다.
-  - `applyRigidDiaphragmConstraints.m`
-    - 층별 바닥의 강체 조건을 `UX, UY, UZ, RX, RY, RZ`로 묶어 회전(비틀림) 변형까지 반영합니다.
-  - `solveConstrainedStatic.m`
-  - `solveEigenModes.m`
-  - `ode45StateRhs3DFrame.m`
+
+MATLAB 기반 20층 프레임 해석 예제입니다.
+
+- `ThreeDimFrame_20story.m`: 정적 해석 및 모드 해석
+- `ThreeDimFrame_20story_ode45.m`: ODE45 기반 동적 응답
+- `utils/build3DFrameGeometry.m`: 다경간 3D 프레임 형상 생성
+- `utils/assemble3DFrameMatrices.m`: 강성/질량/하중 조립
+- `utils/applyRigidDiaphragmConstraints.m`: 강체 바닥 제약 적용
+- `utils/frameSectionProperties.m`: 단면 특성 계산
+
+### `openseespy_scripts/`
+
+OpenSeesPy 기반 20층 프레임 해석 예제입니다.
+
+- `three_story_20_static.py`: 정적 해석 및 모드 해석
+- `three_story_20_dynamic.py`: 동적 시간이력 해석
+- `three_story_20_opensees.py`: 통합 OpenSeesPy 예제
+- `three_story_20_common.py`: 공통 상수 및 보조 함수
+- `README.md`: 영문 문서
+- `readmekr.md`: 한글 문서
 
 ### `Problem/`
-교재/연습형 문제 스크립트 모음
-- `problem1.m` ~ `problem17a.m` (vibration, buckling, FGM, plate/truss/frame 등 범위별 실험)
-- 주요 축
-  - 정적/동적 해석 문제군: `problem3vib.m`, `problem5vib.m`, `problem7vib.m`, `problem9vib.m`, `problem11vib.m`, `problem16vibrations*.m`
-  - 좌굴/안정성: `problem16Buckling.m`, `problem9buk.m`
-  - FGM/재료 모델: `problem16fgm*.m`, `problem16timeReddy.m`
-  - 판/격자/기타 FEM 유틸리티 기반 문제들: `problem16*.m` 계열
+
+교재형 문제 풀이 스크립트 모음입니다.
 
 ### `matlab_codes_fem_book/`
-재사용 가능한 FEM 함수 라이브러리
-- 강성/질량 조립
-  - `formStiffness3Dframe.m`, `formStiffness2Dframe.m`, `formMass3Dframe.m`, `formMass2Dframe.m`
-- 빔/트러스/판/Mindlin 요소 관련
-  - `formStiffnessTimoshenkoBeam.m`, `formStiffnessBernoulliBeam.m`, `formStiffness3Dtruss.m`, `formStiffness2Dtruss.m`
-  - `formMassMatrixMindlin*.m`, `formStiffnessMatrixMindlin*.m`, `formMass3Dtruss.m` 등
-- 바운더리/해석 보조
-  - `EssentialBC.m`, `solution.m`, `eigenvalue.m`, `outputDisplacementsReactions.m`
-- 형상/적분/재료
-  - `Jacobian*.m`, `gaussQuadrature.m`, `shapeFunction*.m`, `rectangularMesh.m`
-  - `srinivasMaterial.m`, `reddy...`, `liewMaterial.m` 등
 
-## 최근 변경 포인트 (요약)
-- `.DS_Store` 무시 규칙 적용 (`.gitignore`)
-- 결과를 CSV로 정리 저장(변위/반력/모드 진동수/외력/회전/층하중 테이블)
-- 20층 모델(`ThreeDimFrame_20story.m`) 생성
-- 강체 바닥(디아프램) 제약 적용
-  - 각 층(2층~최상층)에서 바닥 평면 강체 변형 관계 적용  
-    - `ux_i = uxc - dz*Ry + dy*Rz`
-    - `uy_i = uyc + dz*Rx - dx*Rz`
-    - `uz_i = ucz - dy*Rx + dx*Ry`
-  - 축소 좌표계 해석 후 전체 좌표계로 복원해 반력까지 계산
-- 공통 모듈화 시작
-  - `three_story_20/utils/` 폴더의 스크립트를 통해 `ThreeDimFrame_20story.m`와
-    `ThreeDimFrame_20story_ode45.m`가 공통 함수를 공유
-- 단면관성 자동 계산: `Iy`, `Iz`는 `width`, `depth`에서,  
-  `J`는 사각단면 근사식으로 `width/depth`에 따라 자동 산정
+재사용 가능한 FEM 라이브러리 함수 모음입니다.
 
-## 20층 예제 사용 포인트
-- 기본 형상/해석 옵션
-  - 층수: `numFloors = 20`
-  - 층고: `floorHeight = 4.0` (m)
-  - 평면 치수: `spanX = 4.0`, `spanZ = 4.0` (m)
-- 지반 가속도 입력은 `groundAcceleration` 벡터로 설정 후 `ode45`에 전달
-- 층하중 사용 예시
-  - 모든 층 동일 하중: `floorLoads = -3000 * ones(numFloors,1)`
-  - 층별 가중: `floorLoads = [0; -1000; -1500; ...]`
-  - 방향 지정: `assemble3DFrameMatrices(..., floorLoads, "UX")` (기본값 UX)
-- 출력 CSV (실행 시 `three_story_20/results/`)
-  - `ThreeDimFrame_20story_displacements.csv`
-  - `ThreeDimFrame_20story_reactions.csv`
-  - `ThreeDimFrame_20story_modes.csv`
-  - `ThreeDimFrame_20story_floorLoads.csv`
-  - `ThreeDimFrame_20story_external_loads.csv`
-  - `ThreeDimFrame_20story_node_rotations.csv`
-  - `ThreeDimFrame_20story_ode45_topHistory.csv`
-  - `ThreeDimFrame_20story_ode45_storyDrift.csv`
+## 현재까지 진행한 사항
 
-## 실행 가이드 (MATLAB)
-1. MATLAB 작업 폴더를 `three_story_20` 폴더로 이동
-   - `cd(".../3D_Frame_FEM/three_story_20")`
+2026-03-17 기준으로 다음 작업을 반영했습니다.
+
+- MATLAB 강체 바닥 제약식의 부호/수식 일관성을 정리
+- 단면 특성 계산을 `frameSectionProperties.m`로 공통화
+- OpenSeesPy 정적/동적 스크립트의 `E` 전달 버그 수정
+- OpenSeesPy 반력 CSV가 0으로 저장되던 문제 수정
+  - `ops.reactions()` 호출 후 `nodeReaction()`을 기록하도록 변경
+- OpenSeesPy 문서를 영어/한글로 분리
+  - `openseespy_scripts/README.md`
+  - `openseespy_scripts/readmekr.md`
+- 기존 단일경간 모델을 다경간 모델로 확장
+  - 현재 기본값: `3 x 3 bays`
+  - 기본 경간 간격: `4.0 m x 4.0 m`
+  - 전체 평면 크기: `12.0 m x 12.0 m`
+- OpenSeesPy 시각화 스크립트를 다경간 형상에 맞게 갱신
+
+## 현재 기본 모델 메모
+
+- 층수: 20 stories
+- OpenSeesPy 모델 level 수: 21 (base 포함)
+- 기본 경간 수: `NUM_BAYS_X = 3`, `NUM_BAYS_Z = 3`
+- 재료: `E = 2.0e7 kPa`, `nu = 0.167`
+- 단면: `1.0 m x 1.0 m`
+- 하중 단위: `kN`
+- 길이 단위: `m`
+
+## 현재 구조 형상
+
+아래 이미지는 현재 기본 다경간 모델(`3 x 3 bays`)을 시각화한 결과입니다.
+
+![3D frame view](structure_view_3d.png)
+
+## 실행 예시
+
+### MATLAB
+
+1. `three_story_20` 폴더로 이동
 2. 정적 해석: `ThreeDimFrame_20story`
-3. 지반 가속도 동적해석: `ThreeDimFrame_20story_ode45`
-4. 생성 파일은 `three_story_20/results/`에서 확인 (위 표 참조)
+3. 동적 해석: `ThreeDimFrame_20story_ode45`
+
+### OpenSeesPy
+
+`openseespy_scripts` 폴더에서 실행합니다.
+
+```bash
+python three_story_20_static.py
+python three_story_20_dynamic.py
+```
+
+## 결과 파일
+
+OpenSeesPy 결과는 주로 `openseespy_scripts/results/` 아래에 저장됩니다.
+
+- `three_story_20_static_displacements.csv`
+- `three_story_20_static_reactions.csv`
+- `three_story_20_static_modal.csv`
+- `three_story_20_dynamic_top.csv`
+- `three_story_20_dynamic_story_drift.csv`
+
+MATLAB 결과는 `three_story_20/results/` 아래에 저장됩니다.
 
 ## 라이선스
-- `LICENSE` 참고
+
+라이선스는 `LICENSE` 파일을 참고하세요.
 
 ---
-최종 확인일: 2026-02-15
+
+최종 갱신일: 2026-03-17
